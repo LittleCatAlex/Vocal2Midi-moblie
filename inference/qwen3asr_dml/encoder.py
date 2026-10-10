@@ -4,7 +4,7 @@ import time
 
 import numpy as np
 import onnxruntime as ort
-import scipy.signal
+from inference.audio_utils import get_window_numpy
 
 from inference.device_utils import resolve_onnx_providers
 import logging
@@ -35,7 +35,7 @@ class FastWhisperMel:
         else:
             self.filters = self._generate_filters(sr, n_fft, n_mels, f_min, f_max, norm, mel_scale)
 
-        self.window = scipy.signal.get_window("hann", self.n_fft, fftbins=True)
+        self.window = get_window_numpy("hann", self.n_fft, fftbins=True)
 
     def _generate_filters(self, sr, n_fft, n_mels, f_min, f_max, norm, mel_scale):
         def hz_to_mel(freq, scale):

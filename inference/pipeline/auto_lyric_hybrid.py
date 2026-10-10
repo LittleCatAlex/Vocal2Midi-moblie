@@ -90,12 +90,12 @@ def _validate_slice_runtime_options(
 
 
 def _export_chunk_wavs(chunks, sr: int, output_key: str, output_dir: pathlib.Path, cancel_checker=None) -> None:
-    import scipy.io.wavfile as wavfile
+    from inference.audio_utils import write_wav
 
     for chunk_idx, chunk in enumerate(chunks):
         if cancel_checker and cancel_checker():
             raise InterruptedError("Slicing export task was cancelled")
-        wavfile.write(output_dir / f"{output_key}_{chunk_idx:03d}.wav", sr, chunk["waveform"])
+        write_wav(output_dir / f"{output_key}_{chunk_idx:03d}.wav", sr, chunk["waveform"])
 
 
 def _resolve_rmvpe_path(model_path: str) -> str:

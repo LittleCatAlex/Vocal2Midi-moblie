@@ -13,9 +13,9 @@ import math
 import pathlib
 import re
 
-from scipy.signal import resample_poly
+from inference.audio_utils import resample_numpy
 import numpy as np
-import scipy.io.wavfile as wavfile
+from inference.audio_utils import read_wav
 
 from inference.API.hfa_api import _repair_pred_dict_short_words
 from inference.HubertFA.tools.align_word import Phoneme, Word, WordList
@@ -41,7 +41,7 @@ def _strip_language_prefix(symbol: str, language: str) -> str:
 
 
 def _load_chunk_waveform(path: pathlib.Path, target_sr: int) -> np.ndarray:
-    sr, waveform = wavfile.read(str(path))
+    sr, waveform = read_wav(str(path))
     if waveform.dtype != np.float32:
         if waveform.dtype == np.int16:
             waveform = waveform.astype(np.float32) / 32768.0
@@ -52,7 +52,7 @@ def _load_chunk_waveform(path: pathlib.Path, target_sr: int) -> np.ndarray:
     if waveform.ndim > 1:
         waveform = waveform.mean(axis=1)
     if sr != target_sr:
-        waveform = resample_poly(waveform, target_sr, sr).astype(np.float32, copy=False)
+        waveform = resample_numpy(waveform, sr, target_sr)
     return np.ascontiguousarray(waveform, dtype=np.float32)
 
 

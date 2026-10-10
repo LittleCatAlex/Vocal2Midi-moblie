@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from scipy.signal import resample_poly
+from inference.audio_utils import resample_numpy, get_window_numpy
 def _stft_center_false(y, n_fft, hop_length, window):
     shape = ((len(y) - n_fft) // hop_length + 1, n_fft)
     strides = (y.strides[0] * hop_length, y.strides[0])
@@ -48,7 +48,6 @@ def _mel_filter(sr, n_fft, n_mels, fmin, fmax):
     weights *= enorm[:, np.newaxis]
     return weights
 import numpy as np
-from scipy.signal import get_window
 
 from inference.device_utils import resolve_onnx_providers
 
@@ -95,7 +94,7 @@ class RmvpeTranscriber:
         self.input_name = self.session.get_inputs()[0].name
         self.fixed_batch_size = self._get_fixed_batch_size()
 
-        self.window = get_window("hann", WINDOW_LENGTH, fftbins=True).astype(np.float32)
+        self.window = get_window_numpy("hann", WINDOW_LENGTH, fftbins=True).astype(np.float32)
         self.mel_basis = _mel_filter(
             sr=SAMPLE_RATE,
             n_fft=WINDOW_LENGTH,
@@ -150,7 +149,7 @@ class RmvpeTranscriber:
             )
 
         if sample_rate != SAMPLE_RATE:
-            waveform = resample_poly(waveform, SAMPLE_RATE, sample_rate)
+            waveform = resample_numpy(waveform, sample_rate, SAMPLE_RATE)
         waveform = np.clip(np.asarray(waveform, dtype=np.float32), -1.0, 1.0)
 
         salience = self._inference_salience(waveform, cancel_checker=cancel_checker)

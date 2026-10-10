@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import List
 
 import numpy as np
-import scipy.signal
+from inference.audio_utils import resample_numpy
 
 SUPPORTED_LANGUAGES: List[str] = [
     "Chinese",
@@ -83,7 +83,7 @@ def _load_wav_audio(audio_path: Path, sample_rate: int) -> np.ndarray:
         audio = audio.reshape(-1, num_channels).mean(axis=1)
 
     if src_rate != sample_rate:
-        audio = scipy.signal.resample_poly(audio, sample_rate, src_rate)
+        audio = resample_numpy(audio, src_rate, sample_rate)
 
     return audio.astype(np.float32, copy=False)
 

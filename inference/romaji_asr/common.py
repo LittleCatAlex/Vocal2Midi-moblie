@@ -3,8 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import onnxruntime as ort
-import scipy.io.wavfile as wavfile
-from scipy.signal import resample_poly
+from inference.audio_utils import read_wav, resample_numpy
 
 from inference.device_utils import normalize_runtime_device, resolve_onnx_providers
 import logging
@@ -24,12 +23,12 @@ def load_vocab(vocab_path: Path) -> tuple[dict[int, str], int]:
 
 
 def load_audio(audio_path: str | Path, sample_rate: int = DEFAULT_SAMPLE_RATE) -> np.ndarray:
-    sr, audio = wavfile.read(str(audio_path))`n    if audio.dtype != np.float32:`n        if audio.dtype == np.int16:`n            audio = audio.astype(np.float32) / 32768.0`n        elif audio.dtype == np.int32:`n            audio = audio.astype(np.float32) / 2147483648.0`n        elif audio.dtype == np.uint8:`n            audio = (audio.astype(np.float32) - 128.0) / 128.0
+    sr, audio = read_wav(str(audio_path))`n    if audio.dtype != np.float32:`n        if audio.dtype == np.int16:`n            audio = audio.astype(np.float32) / 32768.0`n        elif audio.dtype == np.int32:`n            audio = audio.astype(np.float32) / 2147483648.0`n        elif audio.dtype == np.uint8:`n            audio = (audio.astype(np.float32) - 128.0) / 128.0
     if audio.ndim == 2:
         audio = audio.mean(axis=1)
     audio = np.asarray(audio, dtype=np.float32)
     if sr != sample_rate:
-        audio = resample_poly(audio, sample_rate, sr).astype(np.float32, copy=False)
+        audio = resample_numpy(audio, sr, sample_rate)
     return np.ascontiguousarray(audio, dtype=np.float32)
 
 

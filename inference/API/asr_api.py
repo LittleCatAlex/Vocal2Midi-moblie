@@ -6,7 +6,7 @@ import sys
 import threading
 import time
 
-import scipy.io.wavfile as wavfile
+from inference.audio_utils import write_wav
 
 from inference.device_utils import normalize_runtime_device
 from inference.pinyin_asr.runtime import PinyinASROnnxModel, resolve_model_dir as resolve_pinyin_model_dir
@@ -289,7 +289,7 @@ def batch_transcribe_pinyin_asr(
         if cancel_checker and cancel_checker():
             raise InterruptedError("ASR task cancelled")
         chunk_path = temp_dir_path / f"chunk_{chunk_idx}.wav"
-        wavfile.write(chunk_path, sr, chunk["waveform"])
+        write_wav(chunk_path, sr, chunk["waveform"])
         audio_paths.append(str(chunk_path))
         chunk_indices.append(chunk_idx)
 
@@ -320,7 +320,7 @@ def batch_transcribe_romaji_asr(
         if cancel_checker and cancel_checker():
             raise InterruptedError("ASR task cancelled")
         chunk_path = temp_dir_path / f"chunk_{chunk_idx}.wav"
-        wavfile.write(chunk_path, sr, chunk["waveform"])
+        write_wav(chunk_path, sr, chunk["waveform"])
         audio_paths.append(str(chunk_path))
         chunk_indices.append(chunk_idx)
 
@@ -675,7 +675,7 @@ def batch_transcribe_asr(
     for chunk_idx, chunk in enumerate(chunks):
         stem = f"chunk_{chunk_idx}"
         chunk_path = temp_dir_path / f"{stem}.wav"
-        wavfile.write(chunk_path, sr, chunk["waveform"])
+        write_wav(chunk_path, sr, chunk["waveform"])
         audio_paths.append(str(chunk_path))
         chunk_indices.append(chunk_idx)
 
