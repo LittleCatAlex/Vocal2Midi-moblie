@@ -37,6 +37,7 @@ android.accept_sdk_license = True
 android.archs = arm64-v8a
 android.allow_backup = True
 android.enable_androidx = True
+android.add_aars = libs/onnxruntime-android-1.17.1.aar
 
 [buildozer]
 log_level = 2
