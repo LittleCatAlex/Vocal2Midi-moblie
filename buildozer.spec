@@ -41,6 +41,6 @@ android.enable_androidx = True
 [buildozer]
 log_level = 2
 warn_on_root = 1
-android.gradle_dependencies = com.microsoft.onnxruntime:onnxruntime-android:latest.release
+android.gradle_dependencies = com.microsoft.onnxruntime:onnxruntime-android:1.17.1
 
 p4a.python_version = 3.11
