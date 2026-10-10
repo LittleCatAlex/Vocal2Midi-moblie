@@ -37,11 +37,11 @@ android.accept_sdk_license = True
 android.archs = arm64-v8a
 android.allow_backup = True
 android.enable_androidx = True
-android.add_aars = libs/onnxruntime-android-1.17.1.aar
+# android.add_aars =
 
 [buildozer]
 log_level = 2
 warn_on_root = 1
-android.gradle_dependencies = 'com.microsoft.onnxruntime:onnxruntime-android:1.17.1'
+android.gradle_dependencies = com.microsoft.onnxruntime:onnxruntime-android:1.17.1
 
 p4a.python_version = 3.11
