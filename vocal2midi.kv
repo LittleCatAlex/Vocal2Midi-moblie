@@ -1,0 +1,231 @@
+#:kivy 2.1.0
+#:import i18n i18n
+#:import dp kivy.metrics.dp
+#:import sp kivy.metrics.sp
+#:set pad 12
+#:set row_h 44
+
+<SectionTitle@Label>:
+    size_hint_y: None
+    height: dp(32)
+    bold: True
+    font_size: sp(16)
+    halign: 'left'
+    text_size: self.width, None
+    color: 0.35, 0.65, 1, 1
+
+<FieldLabel@Label>:
+    size_hint_y: None
+    height: dp(24)
+    font_size: sp(13)
+    halign: 'left'
+    text_size: self.width, None
+
+<PathInput@TextInput>:
+    size_hint_y: None
+    height: dp(row_h)
+    multiline: False
+    font_size: sp(12)
+
+<Vocal2MidiRoot@BoxLayout>:
+    orientation: 'vertical'
+    padding: dp(pad)
+    spacing: dp(8)
+
+    # ---- header -------------------------------------------------------
+    BoxLayout:
+        size_hint_y: None
+        height: dp(row_h)
+        spacing: dp(8)
+        Label:
+            text: app.tr(app.lang, 'app_title')
+            bold: True
+            font_size: sp(18)
+            halign: 'left'
+            text_size: self.size
+            valign: 'middle'
+        Button:
+            size_hint_x: None
+            width: dp(64)
+            text: '中' if app.lang == 'zh' else 'EN'
+            on_release: app.set_ui_language('en' if app.lang == 'zh' else 'zh')
+
+    ScrollView:
+        do_scroll_x: False
+        bar_width: dp(4)
+        BoxLayout:
+            orientation: 'vertical'
+            size_hint_y: None
+            height: self.minimum_height
+            spacing: dp(6)
+
+            # ---- audio files ----
+            SectionTitle:
+                text: app.tr(app.lang, 'section_audio')
+            BoxLayout:
+                size_hint_y: None
+                height: dp(row_h)
+                spacing: dp(8)
+                Button:
+                    text: app.tr(app.lang, 'pick_files')
+                    disabled: app.is_running
+                    on_release: app.open_file_picker()
+                Button:
+                    text: app.tr(app.lang, 'clear_files')
+                    disabled: app.is_running
+                    on_release: app.clear_files()
+            Label:
+                text: app.audio_summary
+                size_hint_y: None
+                height: max(dp(32), self.texture_size[1] + dp(8))
+                font_size: sp(12)
+                halign: 'left'
+                text_size: self.width, None
+
+            # ---- reference lyrics ----
+            SectionTitle:
+                text: app.tr(app.lang, 'ref_lyrics')
+            TextInput:
+                id: lyrics_input
+                size_hint_y: None
+                height: dp(96)
+                hint_text: app.tr(app.lang, 'ref_lyrics_hint')
+                font_size: sp(13)
+
+            # ---- options ----
+            SectionTitle:
+                text: app.tr(app.lang, 'section_options')
+            FieldLabel:
+                text: app.tr(app.lang, 'target_lang')
+            Spinner:
+                id: lang_spinner
+                size_hint_y: None
+                height: dp(row_h)
+                on_text: app.on_choice_selected(self, self.text, app.language_choices)
+            FieldLabel:
+                text: app.tr(app.lang, 'slicing_method')
+            Spinner:
+                id: slice_spinner
+                size_hint_y: None
+                height: dp(row_h)
+                on_text: app.on_choice_selected(self, self.text, i18n.SLICE_METHOD_CHOICES)
+            FieldLabel:
+                text: app.tr(app.lang, 'export_format')
+            Spinner:
+                id: format_spinner
+                size_hint_y: None
+                height: dp(row_h)
+                on_text: app.on_choice_selected(self, self.text, i18n.EXPORT_FORMAT_CHOICES)
+            FieldLabel:
+                text: app.tr(app.lang, 'quant_step')
+            Spinner:
+                id: quant_spinner
+                size_hint_y: None
+                height: dp(row_h)
+                on_text: app.on_choice_selected(self, self.text, i18n.QUANT_STEP_CHOICES)
+            FieldLabel:
+                text: app.tr(app.lang, 'tempo_bpm')
+            TextInput:
+                id: tempo_input
+                size_hint_y: None
+                height: dp(row_h)
+                text: '120'
+                multiline: False
+                input_filter: 'float'
+                input_type: 'number'
+            BoxLayout:
+                size_hint_y: None
+                height: dp(row_h)
+                spacing: dp(8)
+                CheckBox:
+                    id: output_lyrics_check
+                    size_hint_x: None
+                    width: dp(40)
+                    active: True
+                Label:
+                    text: app.tr(app.lang, 'output_lyrics')
+                    halign: 'left'
+                    text_size: self.size
+                    valign: 'middle'
+            FieldLabel:
+                text: app.tr(app.lang, 'save_dir')
+            PathInput:
+                id: save_dir
+
+            # ---- model paths ----
+            SectionTitle:
+                text: app.tr(app.lang, 'section_models')
+            FieldLabel:
+                text: app.tr(app.lang, 'game_path')
+            PathInput:
+                id: path_game_model
+            FieldLabel:
+                text: app.tr(app.lang, 'tifa_path')
+            PathInput:
+                id: path_tifa_model
+            FieldLabel:
+                text: app.tr(app.lang, 'hfa_path')
+            PathInput:
+                id: path_hfa_model
+            FieldLabel:
+                text: app.tr(app.lang, 'asr_path')
+            PathInput:
+                id: path_asr_model
+            FieldLabel:
+                text: app.tr(app.lang, 'phoneme_path')
+            PathInput:
+                id: path_phoneme_asr_model
+            FieldLabel:
+                text: app.tr(app.lang, 'pinyin_path')
+            PathInput:
+                id: path_pinyin_asr_model
+            FieldLabel:
+                text: app.tr(app.lang, 'kashi_g2p_path')
+            PathInput:
+                id: path_kashi_g2p_model
+            FieldLabel:
+                text: app.tr(app.lang, 'rmvpe_path')
+            PathInput:
+                id: path_rmvpe_model
+
+            # ---- log ----
+            SectionTitle:
+                text: app.tr(app.lang, 'log_title')
+            Label:
+                id: log_label
+                size_hint_y: None
+                height: max(dp(80), self.texture_size[1] + dp(8))
+                font_size: sp(11)
+                halign: 'left'
+                valign: 'top'
+                text_size: self.width, None
+
+    # ---- footer: progress + actions ----------------------------------
+    Label:
+        text: app.status_text
+        size_hint_y: None
+        height: dp(24)
+        font_size: sp(12)
+        shorten: True
+        shorten_from: 'right'
+        text_size: self.width, None
+        halign: 'left'
+    ProgressBar:
+        max: 100
+        value: app.progress
+        size_hint_y: None
+        height: dp(12)
+    BoxLayout:
+        size_hint_y: None
+        height: dp(52)
+        spacing: dp(8)
+        Button:
+            text: app.tr(app.lang, 'run')
+            disabled: app.is_running
+            on_release: app.start_pipeline()
+        Button:
+            text: app.tr(app.lang, 'stop')
+            disabled: not app.is_running
+            on_release: app.stop_pipeline()
+
+Vocal2MidiRoot:

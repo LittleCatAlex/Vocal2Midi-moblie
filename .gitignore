@@ -1,0 +1,40 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.apk
+*.bin
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+python/
+
+# Buildozer
+.buildozer/
+bin/
+
+# IDEs and OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Models
+models/**/*.onnx
+models/*.onnx
+*.onnx
+
+# Artifacts
+outputs/
+logs/
+models/
+*.gguf
+*.dll
+
