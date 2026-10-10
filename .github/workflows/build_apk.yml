@@ -29,6 +29,7 @@ jobs:
         run: |
           # buildozer uses the current directory's buildozer.spec
           # we pass 'y' to auto-accept Android SDK licenses
+          export CFLAGS="-Wno-incompatible-function-pointer-types"
           yes | buildozer android debug
 
       - name: Upload APK
