@@ -43,5 +43,6 @@ android.enable_androidx = True
 log_level = 2
 warn_on_root = 1
 android.gradle_dependencies = com.microsoft.onnxruntime:onnxruntime-android:1.17.1
+android.add_jars = java_libs/onnxruntime-1.17.1.jar
 
 p4a.python_version = 3.11
