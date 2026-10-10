@@ -23,7 +23,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y openjdk-17-jdk git zip unzip autoconf libtool pkg-config zlib1g-dev libncurses-dev cmake libffi-dev libssl-dev
-          pip install buildozer cython
+          pip install buildozer cython==0.29.36
 
       - name: Build APK with Buildozer
         run: |

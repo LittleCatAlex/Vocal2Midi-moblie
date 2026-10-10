@@ -18,7 +18,7 @@ version = 0.1.0
 # intentionally NOT listed: they have no p4a recipes (llvmlite, libsndfile,
 # Rust, C++ toolchains) and the code must first be ported to numpy/scipy/av.
 # pure-Python packages (pyyaml, tqdm, mido, textgrid, opencc) install as-is.
-requirements = python3,kivy==2.3.0,plyer,pyjnius,android,numpy,av,pyyaml,tqdm,mido,textgrid,opencc-python-reimplemented
+requirements = python3,kivy==2.3.0,plyer,pyjnius==1.8.0,android,numpy==1.26.4,av,pyyaml,tqdm,mido,textgrid,opencc-python-reimplemented
 
 # Custom recipes (e.g. an  recipe) go here.
 p4a.local_recipes = ./p4a-recipes
@@ -42,3 +42,5 @@ android.enable_androidx = True
 log_level = 2
 warn_on_root = 1
 android.gradle_dependencies = com.microsoft.onnxruntime:onnxruntime-android:latest.release
+
+p4a.python_version = 3.11
