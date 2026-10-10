@@ -18,7 +18,7 @@ version = 0.1.0
 # intentionally NOT listed: they have no p4a recipes (llvmlite, libsndfile,
 # Rust, C++ toolchains) and the code must first be ported to numpy/scipy/av.
 # pure-Python packages (pyyaml, tqdm, mido, textgrid, opencc) install as-is.
-requirements = python3,kivy==2.3.0,plyer,pyjnius,android,numpy,av,pyyaml,tqdm,mido,textgrid,opencc-python-reimplemented
+requirements = python3==3.11.9,kivy==2.3.0,plyer,pyjnius,numpy,av,pyyaml,tqdm,mido,textgrid,opencc-python-reimplemented
 
 # Custom recipes (e.g. an  recipe) go here.
 p4a.local_recipes = ./p4a-recipes
