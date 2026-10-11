@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import yaml
+from ruamel.yaml import YAML
+yaml = YAML()
 
 from inference.API.rmvpe_api import RmvpeResult
 import logging
@@ -472,4 +473,4 @@ def save_ustx(notes: list[Any], filepath: Path, tempo: float, rmvpe_result: Rmvp
 
     filepath.parent.mkdir(parents=True, exist_ok=True)
     with filepath.open("w", encoding="utf-8") as f:
-        yaml.safe_dump(project, f, allow_unicode=True, sort_keys=False)
+        yaml.dump(project, f)

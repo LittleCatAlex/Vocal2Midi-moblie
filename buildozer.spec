@@ -17,8 +17,8 @@ version = 0.1.0
 # provided yet). librosa / soundfile / numba / tokenizers / pyopenjtalk are
 # intentionally NOT listed: they have no p4a recipes (llvmlite, libsndfile,
 # Rust, C++ toolchains) and the code must first be ported to numpy/scipy/av.
-# pure-Python packages (pyyaml, tqdm, mido, textgrid, opencc) install as-is.
-requirements = hostpython3==3.11.9,python3==3.11.9,kivy,plyer,pyjnius,numpy,pyyaml,tqdm,mido,textgrid,opencc-python-reimplemented
+# pure-Python packages (ruamel.yaml, tqdm, mido, textgrid, opencc) install as-is.
+requirements = hostpython3==3.11.9,python3==3.11.9,kivy,plyer,pyjnius,numpy,ruamel.yaml,tqdm,mido,textgrid,opencc-python-reimplemented
 
 # Custom recipes (e.g. an  recipe) go here.
 p4a.local_recipes = ./p4a-recipes
@@ -37,9 +37,8 @@ android.accept_sdk_license = True
 android.archs = arm64-v8a
 android.allow_backup = True
 android.enable_androidx = True
-android.add_src = java_src
-android.add_jars = java_libs/onnxruntime-1.17.1.jar
-android.gradle_dependencies = com.microsoft.onnxruntime:onnxruntime-android:1.17.1
+android.add_aars = libs/onnxruntime-android-1.17.1.aar
+android.add_gradle_repositories = flatDir { dirs 'libs' }
 p4a.python_version = 3.11
 
 [buildozer]

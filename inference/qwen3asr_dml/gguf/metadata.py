@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import re
 import json
-import yaml
+from ruamel.yaml import YAML
+yaml = YAML()
 import logging
 from pathlib import Path
 from typing import Any, Literal, Optional
@@ -192,7 +193,7 @@ class Metadata:
         yaml_content = yaml_content.replace("\t", "  ")
 
         if yaml_content:
-            data = yaml.safe_load(yaml_content)
+            data = yaml.load(yaml_content)
             if isinstance(data, dict):
                 return data
             else:

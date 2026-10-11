@@ -1,12 +1,13 @@
 import os
 from pathlib import Path
 
-import yaml
+from ruamel.yaml import YAML
+yaml = YAML()
 
 
 def load_yaml(yaml_path):
     with open(yaml_path, "r", encoding="utf-8") as f:
-        config = yaml.safe_load(f)
+        config = yaml.load(f)
     return config
 
 
