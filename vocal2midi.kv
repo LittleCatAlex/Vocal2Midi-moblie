@@ -44,11 +44,13 @@
             halign: 'left'
             text_size: self.size
             valign: 'middle'
-        Button:
+        Spinner:
+            id: ui_lang_spinner
             size_hint_x: None
-            width: dp(64)
-            text: '中' if app.lang == 'zh' else 'EN'
-            on_release: app.set_ui_language('en' if app.lang == 'zh' else 'zh')
+            width: dp(96)
+            text: app.get_ui_lang_label(app.lang)
+            values: app.ui_lang_display_values
+            on_text: app.on_ui_lang_selected(self.text)
 
     ScrollView:
         do_scroll_x: False

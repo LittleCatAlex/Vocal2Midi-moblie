@@ -35,6 +35,10 @@ KV_FILE = ROOT_DIR / "vocal2midi.kv"
 CJK_FONT_CANDIDATES = [
     # Android system fonts
     "/system/fonts/NotoSansCJK-Regular.ttc",
+    "/system/fonts/NotoSansTC-Regular.otf",
+    "/system/fonts/NotoSansJP-Regular.otf",
+    "/system/fonts/NotoSansCJKtc-Regular.otf",
+    "/system/fonts/NotoSansCJKjp-Regular.otf",
     "/system/fonts/NotoSansSC-Regular.otf",
     "/system/fonts/NotoSansCJKsc-Regular.otf",
     "/system/fonts/DroidSansFallback.ttf",
@@ -166,6 +170,8 @@ class Vocal2MidiApp(App):
         return root
 
     def on_start(self):
+        if hasattr(self, "root") and self.root and "ui_lang_spinner" in self.root.ids:
+            self.root.ids.ui_lang_spinner.text = self.get_ui_lang_label(self.lang)
         if platform == "android":
             self._request_android_permissions()
         else:
@@ -247,6 +253,23 @@ class Vocal2MidiApp(App):
         self.refresh_choices()
 
     # -------------------------------------------------------------- i18n/UI
+    @property
+    def ui_lang_display_values(self) -> list[str]:
+        return [label for _, label in i18n.UI_LANG_CHOICES]
+
+    def get_ui_lang_label(self, code: str) -> str:
+        for c, label in i18n.UI_LANG_CHOICES:
+            if c == code:
+                return label
+        return "繁體中文"
+
+    def on_ui_lang_selected(self, selected_label: str):
+        for code, label in i18n.UI_LANG_CHOICES:
+            if label == selected_label:
+                if self.lang != code:
+                    self.set_ui_language(code)
+                return
+
     def tr(self, lang, key, **kwargs):
         """kv helper: ``app.tr(app.lang, 'key')`` re-evaluates on language change."""
         return i18n.tr(key, **kwargs)
@@ -284,6 +307,8 @@ class Vocal2MidiApp(App):
 
     def set_ui_language(self, code: str):
         self.lang = i18n.set_language(code)
+        if hasattr(self, "root") and self.root and "ui_lang_spinner" in self.root.ids:
+            self.root.ids.ui_lang_spinner.text = self.get_ui_lang_label(self.lang)
         self.refresh_choices()
         if not self.is_running:
             self.status_text = tr("idle")
