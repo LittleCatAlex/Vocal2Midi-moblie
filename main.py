@@ -380,7 +380,7 @@ class Vocal2MidiApp(App):
             },
         }
 
-    def build_config(self, values: dict):
+    def build_pipeline_config(self, values: dict):
         from application.config import PipelineConfig
 
         models = values["models"]
@@ -466,7 +466,7 @@ class Vocal2MidiApp(App):
                         tr("processing", i=index, n=total, f=name),
                         (index - 1) / total * 100,
                     )
-                    config = self.build_config(values)
+                    config = self.build_pipeline_config(values)
                     config.audio_path = path
                     config.output_filename = name
                     config.asr_session = session
