@@ -11,6 +11,7 @@ source.exclude_dirs = python, gui, scripts, tests, models, outputs, settings, .g
 source.exclude_patterns = *.dll, *.bat, *.exe, *.pyc, install.bat, run.bat, app_fluent.py
 
 version = 0.1.0
+icon.filename = %(source.dir)s/icon.png
 
 # NOTE (see Build_Report.md): "" has NO python-for-android recipe and
 # there are no Android wheels on PyPI, so it must come from ./p4a-recipes (not
