@@ -17,8 +17,8 @@ version = 0.1.0
 # provided yet). librosa / soundfile / numba / tokenizers / pyopenjtalk are
 # intentionally NOT listed: they have no p4a recipes (llvmlite, libsndfile,
 # Rust, C++ toolchains) and the code must first be ported to numpy/scipy/av.
-# pure-Python packages (ruamel.yaml, tqdm, mido, textgrid, opencc) install as-is.
-requirements = hostpython3==3.11.9,python3==3.11.9,kivy,plyer,pyjnius==1.6.1,numpy==1.26.4,ruamel.yaml==0.17.21,tqdm,mido,textgrid,opencc-python-reimplemented
+# pure-Python packages (pyyaml, tqdm, mido, textgrid, opencc) install as-is.
+requirements = hostpython3==3.11.9,python3==3.11.9,kivy,plyer,pyjnius,numpy,pyyaml,tqdm,mido,textgrid,opencc-python-reimplemented
 
 # Custom recipes (e.g. an  recipe) go here.
 p4a.local_recipes = ./p4a-recipes

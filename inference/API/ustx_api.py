@@ -5,8 +5,19 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from ruamel.yaml import YAML
-yaml = YAML()
+try:
+    import yaml
+except ImportError:
+    from ruamel.yaml import YAML
+    _yaml = YAML()
+    class _YamlCompat:
+        @staticmethod
+        def safe_dump(data, stream=None, **kwargs):
+            return _yaml.dump(data, stream)
+        @staticmethod
+        def dump(data, stream=None, **kwargs):
+            return _yaml.dump(data, stream)
+    yaml = _YamlCompat()
 
 from inference.API.rmvpe_api import RmvpeResult
 import logging
@@ -473,4 +484,4 @@ def save_ustx(notes: list[Any], filepath: Path, tempo: float, rmvpe_result: Rmvp
 
     filepath.parent.mkdir(parents=True, exist_ok=True)
     with filepath.open("w", encoding="utf-8") as f:
-        yaml.dump(project, f)
+        getattr(yaml, 'safe_dump', yaml.dump)(project, f, allow_unicode=True, sort_keys=False)

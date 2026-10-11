@@ -1,13 +1,24 @@
 import os
 from pathlib import Path
 
-from ruamel.yaml import YAML
-yaml = YAML()
+try:
+    import yaml
+except ImportError:
+    from ruamel.yaml import YAML
+    _yaml = YAML()
+    class _YamlCompat:
+        @staticmethod
+        def safe_load(stream):
+            return _yaml.load(stream)
+        @staticmethod
+        def load(stream):
+            return _yaml.load(stream)
+    yaml = _YamlCompat()
 
 
 def load_yaml(yaml_path):
     with open(yaml_path, "r", encoding="utf-8") as f:
-        config = yaml.load(f)
+        config = getattr(yaml, 'safe_load', yaml.load)(f)
     return config
 
 

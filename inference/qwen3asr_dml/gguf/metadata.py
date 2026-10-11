@@ -2,8 +2,19 @@ from __future__ import annotations
 
 import re
 import json
-from ruamel.yaml import YAML
-yaml = YAML()
+try:
+    import yaml
+except ImportError:
+    from ruamel.yaml import YAML
+    _yaml = YAML()
+    class _YamlCompat:
+        @staticmethod
+        def safe_load(stream):
+            return _yaml.load(stream)
+        @staticmethod
+        def load(stream):
+            return _yaml.load(stream)
+    yaml = _YamlCompat()
 import logging
 from pathlib import Path
 from typing import Any, Literal, Optional
@@ -193,7 +204,7 @@ class Metadata:
         yaml_content = yaml_content.replace("\t", "  ")
 
         if yaml_content:
-            data = yaml.load(yaml_content)
+            data = getattr(yaml, 'safe_load', yaml.load)(yaml_content)
             if isinstance(data, dict):
                 return data
             else:
