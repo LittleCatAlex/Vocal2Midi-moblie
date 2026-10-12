@@ -19,7 +19,7 @@ icon.filename = %(source.dir)s/icon.png
 # intentionally NOT listed: they have no p4a recipes (llvmlite, libsndfile,
 # Rust, C++ toolchains) and the code must first be ported to numpy/scipy/av.
 # pure-Python packages (pyyaml, tqdm, mido, textgrid, opencc) install as-is.
-requirements = hostpython3==3.11.9,python3==3.11.9,kivy,plyer,pyjnius,numpy,pyyaml,tqdm,mido,textgrid,opencc-python-reimplemented
+requirements = hostpython3==3.11.9,python3==3.11.9,kivy,plyer,pyjnius,numpy,pyyaml,tqdm,mido,packaging,click,textgrid,opencc-python-reimplemented
 
 # Custom recipes (e.g. an  recipe) go here.
 p4a.local_recipes = ./p4a-recipes

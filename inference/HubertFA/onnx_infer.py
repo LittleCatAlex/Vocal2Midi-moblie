@@ -1,7 +1,10 @@
 import json
 import pathlib
 
-import click
+try:
+    import click
+except ImportError:
+    click = None
 import onnxruntime as ort
 
 from inference.device_utils import resolve_onnx_providers
@@ -57,31 +60,35 @@ class InferenceOnnx(InferenceBase):
         return ort.InferenceSession(str(onnx_path), options, providers=providers)
 
 
-@click.command()
-@click.option("--onnx_path", "-m", required=True, type=pathlib.Path, help="Path to Onnx models")
-@click.option("--wav_folder", "-wf", default="segments", type=pathlib.Path, help="Input folder path")
-@click.option("--out_path", "-o", default=None, type=str, help="path to the output label")
-@click.option("--g2p", "-g", default="dictionary", type=str, help="G2P class name")
-@click.option("--non_lexical_phonemes", "-np", default="AP", type=str, help="non speech phonemes, exp. AP,EP")
-@click.option("--language", "-l", default="zh", help="Dictionary language")
-@click.option("--dictionary", "-d", type=pathlib.Path, help="Custom dictionary path")
-@click.option("--pad_times", "-pt", type=int, default=1, help="The number of times to pad blank audio before reasoning")
-@click.option("--pad_length", "-pl", type=int, default=5,
-              help="The max length of blank audio on the pad before inference")
-@click.option("--out_format", "-f", type=click.Choice(['TextGrid', 'HTK']), default='TextGrid',
-              help="Format to export predictions to.")
-def infer(onnx_path: pathlib.Path, wav_folder: pathlib.Path, out_path: pathlib.Path | None, g2p: str,
-          non_lexical_phonemes: str, language: str, dictionary: pathlib.Path, pad_times: int, pad_length: int, out_format: str):
-    assert onnx_path.exists() and onnx_path.is_file() and onnx_path.suffix == '.onnx', \
-        f"Path {onnx_path} does not exist or is not a onnx file."
+if click is not None:
+    @click.command()
+    @click.option("--onnx_path", "-m", required=True, type=pathlib.Path, help="Path to Onnx models")
+    @click.option("--wav_folder", "-wf", default="segments", type=pathlib.Path, help="Input folder path")
+    @click.option("--out_path", "-o", default=None, type=str, help="path to the output label")
+    @click.option("--g2p", "-g", default="dictionary", type=str, help="G2P class name")
+    @click.option("--non_lexical_phonemes", "-np", default="AP", type=str, help="non speech phonemes, exp. AP,EP")
+    @click.option("--language", "-l", default="zh", help="Dictionary language")
+    @click.option("--dictionary", "-d", type=pathlib.Path, help="Custom dictionary path")
+    @click.option("--pad_times", "-pt", type=int, default=1, help="The number of times to pad blank audio before reasoning")
+    @click.option("--pad_length", "-pl", type=int, default=5,
+                  help="The max length of blank audio on the pad before inference")
+    @click.option("--out_format", "-f", type=click.Choice(['TextGrid', 'HTK']), default='TextGrid',
+                  help="Format to export predictions to.")
+    def infer(onnx_path: pathlib.Path, wav_folder: pathlib.Path, out_path: pathlib.Path | None, g2p: str,
+              non_lexical_phonemes: str, language: str, dictionary: pathlib.Path, pad_times: int, pad_length: int, out_format: str):
+        assert onnx_path.exists() and onnx_path.is_file() and onnx_path.suffix == '.onnx', \
+            f"Path {onnx_path} does not exist or is not a onnx file."
 
-    inference = InferenceOnnx(onnx_path=onnx_path)
-    inference.load_config()
-    inference.init_decoder()
-    inference.load_model()
-    inference.get_dataset(wav_folder=wav_folder, language=language, g2p=g2p, dictionary_path=dictionary)
-    inference.infer(non_lexical_phonemes=non_lexical_phonemes, pad_times=pad_times, pad_length=pad_length)
-    inference.export(output_folder=wav_folder if out_path is None else out_path, output_format=[out_format.lower()])
+        inference = InferenceOnnx(onnx_path=onnx_path)
+        inference.load_config()
+        inference.init_decoder()
+        inference.load_model()
+        inference.get_dataset(wav_folder=wav_folder, language=language, g2p=g2p, dictionary_path=dictionary)
+        inference.infer(non_lexical_phonemes=non_lexical_phonemes, pad_times=pad_times, pad_length=pad_length)
+        inference.export(output_folder=wav_folder if out_path is None else out_path, output_format=[out_format.lower()])
+else:
+    def infer(*args, **kwargs):
+        raise ImportError("click is required to run HubertFA onnx_infer CLI.")
 
 
 if __name__ == '__main__':

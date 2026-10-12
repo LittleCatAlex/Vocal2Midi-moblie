@@ -151,6 +151,10 @@ class Vocal2MidiApp(App):
 
     title = "Vocal2Midi"
 
+    def __init__(self, **kwargs):
+        register_cjk_font()
+        super().__init__(**kwargs)
+
     # ------------------------------------------------------------------ setup
     def build(self):
         register_cjk_font()
@@ -164,8 +168,13 @@ class Vocal2MidiApp(App):
         self._log_lines: list[str] = []
         self.status_text = tr("idle")
         self._update_audio_summary()
-        root = Builder.load_file(str(KV_FILE))
-        self.root = root  # App.run() assigns this later; helpers need it now
+
+        # If vocal2midi.kv was auto-loaded by Kivy (App.load_kv), self.root is already
+        # initialized from the root rule (Vocal2MidiRoot:). Do not re-load to prevent UI duplication.
+        root = self.root
+        if root is None:
+            root = Builder.load_file(str(KV_FILE))
+            self.root = root
         self._init_defaults(root)
         return root
 

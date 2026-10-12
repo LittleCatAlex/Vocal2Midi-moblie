@@ -1,5 +1,8 @@
 import numpy as np
-from matplotlib import pyplot as plt
+try:
+    from matplotlib import pyplot as plt
+except ImportError:
+    plt = None
 
 
 def plot_force_alignment_prob(melspec,
