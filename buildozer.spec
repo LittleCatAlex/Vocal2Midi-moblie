@@ -38,6 +38,10 @@ android.accept_sdk_license = True
 android.archs = arm64-v8a
 android.allow_backup = True
 android.enable_androidx = True
+# ONNX Runtime: packaged via AAR (includes both Java classes and C++ .so libraries).
+# libs/onnxruntime-classes.jar is extracted in libs/ for reference.
+# (Note: Enabling android.add_jars simultaneously with android.add_aars triggers checkDebugDuplicateClasses collision in Gradle)
+# android.add_jars = libs/onnxruntime-classes.jar
 android.add_aars = libs/onnxruntime-android-1.17.1.aar
 android.add_gradle_repositories = flatDir { dirs 'libs' }
 p4a.python_version = 3.11

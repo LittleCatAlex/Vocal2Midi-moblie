@@ -29,20 +29,63 @@ def mock_get_available_providers():
 if is_android():
     from jnius import autoclass
     
+    # Pre-cache all ONNX Runtime Java classes on the main thread during app startup.
+    # PyJnius registers them in its global cache, preventing dynamic FindClass
+    # lookups on background worker threads where the system classloader would fail.
     OrtEnvironment = autoclass('ai.onnxruntime.OrtEnvironment')
+    OrtSession = autoclass('ai.onnxruntime.OrtSession')
+    OrtSessionResult = autoclass('ai.onnxruntime.OrtSession$Result')
     JavaSessionOptions = autoclass('ai.onnxruntime.OrtSession$SessionOptions')
     OnnxTensor = autoclass('ai.onnxruntime.OnnxTensor')
+    OnnxValue = autoclass('ai.onnxruntime.OnnxValue')
+    NodeInfo = autoclass('ai.onnxruntime.NodeInfo')
+    TensorInfo = autoclass('ai.onnxruntime.TensorInfo')
     HashMap = autoclass('java.util.HashMap')
     
+    # Pre-cache optional / nested classes safely
+    for _cls in [
+        'ai.onnxruntime.OrtSession$RunOptions',
+        'ai.onnxruntime.OrtSession$SessionOptions$ExecutionMode',
+        'ai.onnxruntime.OrtSession$SessionOptions$OptLevel',
+        'ai.onnxruntime.MapInfo',
+        'ai.onnxruntime.SequenceInfo',
+        'ai.onnxruntime.OrtException',
+    ]:
+        try:
+            autoclass(_cls)
+        except Exception:
+            pass
+
+    def init_android_thread_classloader():
+        """Ensure background threads have access to the APK's ClassLoader.
+        
+        On Android, native pthreads / Python threading.Thread attached via JNI
+        default to the system ClassLoader (DexPathList[[directory "."]]), causing
+        ClassNotFoundException when loading application classes. Setting the
+        current thread's context ClassLoader to PythonActivity's ClassLoader
+        fixes this.
+        """
+        try:
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            activity = PythonActivity.mActivity
+            if activity is not None:
+                cl = activity.getClassLoader()
+                Thread = autoclass('java.lang.Thread')
+                Thread.currentThread().setContextClassLoader(cl)
+        except Exception as exc:
+            logger.warning(f"Failed to set thread ContextClassLoader: {exc}")
+
     _env = None
     def get_ort_env():
         global _env
         if _env is None:
+            init_android_thread_classloader()
             _env = OrtEnvironment.getEnvironment()
         return _env
     
     class OrtSessionWrapper:
         def __init__(self, model_path: str, providers=None, sess_options=None):
+            init_android_thread_classloader()
             self.model_path = str(model_path)
             self.env = get_ort_env()
             opt = JavaSessionOptions()
@@ -53,6 +96,7 @@ if is_android():
             return OnnxTensor.createTensor(self.env, nested_list)
 
         def run(self, output_names, input_feed: dict):
+            init_android_thread_classloader()
             java_map = HashMap()
             tensors_to_close = []
             try:
@@ -87,6 +131,7 @@ if is_android():
                     t.close()
                     
         def get_inputs(self):
+            init_android_thread_classloader()
             inputs = []
             info_map = self.session.getInputInfo()
             keys = info_map.keySet().iterator()
@@ -115,5 +160,9 @@ if is_android():
         sys.modules['onnxruntime'] = ort_mock
 
 else:
+    def init_android_thread_classloader():
+        pass
+
     def inject_ort_mock():
         pass
+

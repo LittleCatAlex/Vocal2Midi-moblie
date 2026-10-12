@@ -19,7 +19,7 @@ import traceback
 from kivy.app import App
 from kivy.clock import Clock
 
-from inference.ort_android_wrapper import inject_ort_mock
+from inference.ort_android_wrapper import inject_ort_mock, init_android_thread_classloader
 inject_ort_mock()
 
 from kivy.lang import Builder
@@ -470,6 +470,7 @@ class Vocal2MidiApp(App):
 
     def _run_worker(self, values: dict, files: list[str]):
         """Runs on a background thread. Never touch widgets directly here."""
+        init_android_thread_classloader()
         old_stdout, old_stderr = sys.stdout, sys.stderr
         sys.stdout = _StreamRedirector(old_stdout, self.log)
         sys.stderr = _StreamRedirector(old_stderr, self.log)
