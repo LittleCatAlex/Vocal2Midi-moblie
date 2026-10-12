@@ -14,7 +14,8 @@ def _get_rms(y, frame_length, hop_length):
 import numpy as np
 import itertools
 import functools
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from inference.platform_utils import is_android
 
 from inference.slicer.slicer2 import Slicer
 import logging
@@ -592,12 +593,26 @@ def pitch_based_slice(
         # Create a wrapper for the slicer function to handle segment offsets
         split_task = functools.partial(_split_wrapper, slicer_func=slicer_func)
 
-        with ProcessPoolExecutor() as executor:
-            # Map the task to all long segments
-            processed_chunks_iter = executor.map(split_task, long_segments)
-            
-            # Flatten the list of lists
-            processed_chunks = [chunk for sublist in processed_chunks_iter for chunk in sublist]
+        if is_android():
+            executor_cls = ThreadPoolExecutor
+        else:
+            executor_cls = ProcessPoolExecutor
+
+        try:
+            with executor_cls() as executor:
+                # Map the task to all long segments
+                processed_chunks_iter = executor.map(split_task, long_segments)
+                # Flatten the list of lists
+                processed_chunks = [chunk for sublist in processed_chunks_iter for chunk in sublist]
+        except (NotImplementedError, ImportError, OSError):
+            # Android/Bionic lacks sem_open for multiprocessing.synchronize; fallback to ThreadPoolExecutor
+            try:
+                with ThreadPoolExecutor() as executor:
+                    processed_chunks_iter = executor.map(split_task, long_segments)
+                    processed_chunks = [chunk for sublist in processed_chunks_iter for chunk in sublist]
+            except Exception:
+                # Final sequential fallback if thread pool fails
+                processed_chunks = [chunk for seg in long_segments for chunk in split_task(seg)]
 
         final_chunks = short_segments + processed_chunks
         # Sort by offset to maintain original order

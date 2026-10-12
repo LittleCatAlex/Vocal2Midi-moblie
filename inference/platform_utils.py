@@ -7,6 +7,7 @@ Android the pipeline is forced onto the pure-ONNX phoneme ASR engines
 from __future__ import annotations
 
 import os
+import sys
 
 # Languages that have a pure-ONNX ASR engine usable without Qwen3-ASR.
 ANDROID_SUPPORTED_LANGUAGES = ("zh", "ja")
@@ -14,6 +15,8 @@ ANDROID_SUPPORTED_LANGUAGES = ("zh", "ja")
 
 def is_android() -> bool:
     """True when running under python-for-android / Kivy on Android."""
+    if hasattr(sys, "getandroidapilevel"):
+        return True
     try:
         from kivy.utils import platform
 

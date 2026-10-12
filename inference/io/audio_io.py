@@ -36,23 +36,24 @@ def _find_ffmpeg() -> str:
     found = shutil.which("ffmpeg")
     if found is None:
         raise AudioLoadError(
-            f"ffmpeg not found: expected the bundled copy at '{_FFFMPEG_PATH}' "
+            f"ffmpeg not found: expected the bundled copy at '{_FFMPEG_PATH}' "
             "or an 'ffmpeg' on PATH."
         )
     return found
 
 
 def load_audio(path: str | pathlib.Path, sr: int, mono: bool = True):
-    try:
-        from inference.platform_utils import is_android
-        if is_android():
-            from inference.audio_utils import read_wav, resample_numpy
-            
+    from inference.platform_utils import is_android
+
+    if is_android():
+        from inference.audio_utils import read_wav, resample_numpy
+
+        try:
             orig_sr, wave_audio = read_wav(str(path))
-            
+
             if mono and wave_audio.ndim > 1:
                 wave_audio = wave_audio.mean(axis=1)
-                
+
             if wave_audio.dtype != np.float32:
                 if wave_audio.dtype == np.int16:
                     wave_audio = wave_audio.astype(np.float32) / 32768.0
@@ -60,14 +61,15 @@ def load_audio(path: str | pathlib.Path, sr: int, mono: bool = True):
                     wave_audio = wave_audio.astype(np.float32) / 2147483648.0
                 elif wave_audio.dtype == np.uint8:
                     wave_audio = (wave_audio.astype(np.float32) - 128.0) / 128.0
-                    
+
             if orig_sr != sr:
                 wave_audio = resample_numpy(wave_audio, orig_sr, sr)
-                
+
             return wave_audio, int(sr)
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Android fallback audio load failed: {e}")
+        except Exception as e:
+            raise ValueError(
+                "Android 版本目前不支援直接解碼此音訊格式（如 MP3），請轉換為 WAV 檔後再試。"
+            ) from e
     """Decode an audio file to float32 PCM with the bundled ffmpeg.
 
     Args:
