@@ -69,7 +69,7 @@ def get_fixed_batch_size(session: ort.InferenceSession) -> int | None:
 
 def get_fixed_num_samples(session: ort.InferenceSession) -> int | None:
     shape = session.get_inputs()[0].shape
-    if len(shape) < 2:
+    if not shape or len(shape) < 2:
         return None
     dim1 = shape[1]
     return int(dim1) if isinstance(dim1, int) else None
