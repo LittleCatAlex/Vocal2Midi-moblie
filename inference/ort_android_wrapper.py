@@ -12,11 +12,22 @@ class MockSessionOptions:
         self.execution_mode = None
         self.intra_op_num_threads = 0
         self.inter_op_num_threads = 0
+        self.log_severity_level = 0
+        self.log_verbosity_level = 0
+        self.enable_profiling = False
+        self.profile_file_prefix = ""
+        self.optimized_model_filepath = ""
 
     def add_session_config_entry(self, key, value):
         pass
 
     def set_session_config_entry(self, key, value):
+        pass
+
+    def add_free_dimension_override_by_name(self, dim_name, dim_value):
+        pass
+
+    def add_free_dimension_override_by_denotation(self, dim_denotation, dim_value):
         pass
 
 class MockGraphOptimizationLevel:
@@ -92,12 +103,17 @@ def _extract_onnx_value(val_obj):
             
             buf = val_obj.getByteBuffer()
             if buf is not None:
-                if 'ByteOrder' in globals() and globals()['ByteOrder'] is not None:
-                    buf.order(ByteOrder.nativeOrder())
+                BO = globals().get('ByteOrder')
+                if BO is not None:
+                    try:
+                        buf.order(BO.nativeOrder())
+                    except Exception:
+                        pass
                 cap = int(buf.capacity())
                 dst = bytearray(cap)
                 buf.position(0)
-                buf.get(dst)
+                if cap > 0:
+                    buf.get(dst)
                 return np.frombuffer(dst, dtype=target_dtype).reshape(shape)
         except Exception as exc:
             logger.debug(f"Direct ByteBuffer output extraction failed ({exc}), falling back to getValue()")
@@ -398,19 +414,56 @@ if is_android():
         return _env
     
     class OrtSessionWrapper:
-        def __init__(self, model_path: str, providers=None, sess_options=None):
+        def __init__(self, path_or_bytes, sess_options=None, providers=None, provider_options=None, **kwargs):
             init_android_thread_classloader()
-            self.model_path = str(model_path)
-            self._parsed_inputs, self._parsed_outputs = extract_onnx_io_metadata(self.model_path)
+            # If 2nd positional argument is actually a providers list (e.g. InferenceSession(path, ['CPUExecutionProvider']))
+            if isinstance(sess_options, (list, tuple)) and providers is None:
+                providers = sess_options
+                sess_options = None
+
+            self.model_path = str(path_or_bytes) if not isinstance(path_or_bytes, (bytes, bytearray)) else None
+            self.sess_options = sess_options
+            self.providers = list(providers) if providers is not None else ["CPUExecutionProvider"]
+            self.provider_options = dict(provider_options) if provider_options is not None else {}
+
+            self._parsed_inputs, self._parsed_outputs = extract_onnx_io_metadata(self.model_path) if self.model_path else ([], [])
             self.env = get_ort_env()
             opt = JavaSessionOptions()
-            self.session = self.env.createSession(self.model_path, opt)
+            if self.model_path:
+                self.session = self.env.createSession(self.model_path, opt)
+            else:
+                self.session = self.env.createSession(bytearray(path_or_bytes), opt)
 
         def get_providers(self):
+            if isinstance(self.providers, list) and len(self.providers) > 0:
+                return list(self.providers)
             return ["CPUExecutionProvider"]
 
         def get_provider_options(self):
+            if isinstance(self.provider_options, dict):
+                return dict(self.provider_options)
             return {"CPUExecutionProvider": {}}
+
+        def set_providers(self, providers, provider_options=None):
+            if providers:
+                self.providers = list(providers)
+            if provider_options:
+                self.provider_options = dict(provider_options)
+
+        def get_session_options(self):
+            return self.sess_options or MockSessionOptions()
+
+        def disable_fallback(self):
+            pass
+
+        def enable_fallback(self):
+            pass
+
+        def get_profiling_start_time_ns(self):
+            return 0
+
+        def end_profiling(self):
+            return ""
                 
         def _create_java_tensor(self, np_array: np.ndarray):
             init_android_thread_classloader()
@@ -638,6 +691,8 @@ if is_android():
         ort_mock.GraphOptimizationLevel = MockGraphOptimizationLevel()
         ort_mock.ExecutionMode = MockExecutionMode()
         ort_mock.get_available_providers = mock_get_available_providers
+        ort_mock.get_all_providers = mock_get_available_providers
+        ort_mock.get_device = lambda: "CPU"
         ort_mock.NodeArg = MockNodeArg
         sys.modules['onnxruntime'] = ort_mock
 
