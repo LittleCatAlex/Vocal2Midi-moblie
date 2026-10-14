@@ -196,6 +196,7 @@ def run_tifa_fa(
         model.model_dir,
         japanese_g2p_engine=japanese_g2p_engine,
         kashi_g2p_model_dir=kashi_g2p_model_dir,
+        language=language,
     )
     pred_dict: dict = {}
     display: dict[str, list[tuple[str, str]]] = {}

@@ -39,17 +39,81 @@ def converter(*, id: str, language: str | Language | None = None) -> Callable[[t
     return decorator
 
 
+def _ensure_loaded():
+    if not _converter_registry:
+        try:
+            import inference.TiFA.g2p.converters  # noqa: F401
+        except Exception:
+            pass
+    if not _preprocessor_registry:
+        try:
+            import inference.TiFA.g2p.preprocessors  # noqa: F401
+        except Exception:
+            pass
+
+
 def get_preprocessor(id: str) -> type:
+    _ensure_loaded()
+    if id not in _preprocessor_registry:
+        try:
+            import inference.TiFA.g2p.preprocessors.simple  # noqa: F401
+        except Exception:
+            pass
+    if id not in _preprocessor_registry:
+        raise KeyError(f"G2P preprocessor '{id}' not found. Available: {list(_preprocessor_registry.keys())}")
     return _preprocessor_registry[id]
 
 
 def get_converter(id: str) -> type:
+    _ensure_loaded()
+    if id not in _converter_registry:
+        # Fallback direct submodule imports
+        if id in ("chinese-pinyin", "yue-jyutping", "pinyin-lax"):
+            try:
+                import inference.TiFA.g2p.converters.chinese  # noqa: F401
+            except Exception:
+                pass
+        elif id in ("japanese-kana", "japanese-mecab"):
+            try:
+                import inference.TiFA.g2p.converters.japanese  # noqa: F401
+            except Exception:
+                pass
+        elif id == "lstm":
+            try:
+                import inference.TiFA.g2p.converters.lstm  # noqa: F401
+            except Exception:
+                pass
+        elif id == "dictionary":
+            try:
+                import inference.TiFA.g2p.converters.dictionary  # noqa: F401
+            except Exception:
+                pass
+        elif id in ("passthrough", "characters"):
+            try:
+                import inference.TiFA.g2p.converters.simple  # noqa: F401
+            except Exception:
+                pass
+        elif id == "japanese-onnx":
+            try:
+                import inference.TiFA.japanese_onnx  # noqa: F401
+            except Exception:
+                pass
+        elif id == "japanese-lexicon":
+            try:
+                import inference.TiFA.japanese_lexicon  # noqa: F401
+            except Exception:
+                pass
+
+    if id not in _converter_registry:
+        raise KeyError(f"G2P converter '{id}' not found. Available: {list(_converter_registry.keys())}")
     return _converter_registry[id]
 
 
 def list_preprocessors() -> list[str]:
+    _ensure_loaded()
     return list(_preprocessor_registry.keys())
 
 
 def list_converters() -> list[str]:
+    _ensure_loaded()
     return list(_converter_registry.keys())

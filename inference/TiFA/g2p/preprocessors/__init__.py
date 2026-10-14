@@ -1,9 +1,11 @@
-import importlib
-from pathlib import Path
-
+import logging
 from .base import Preprocessor
 
-_dir = Path(__file__).parent
-for _f in _dir.iterdir():
-    if _f.suffix == ".py" and _f.stem not in ("__init__", "base"):
-        importlib.import_module(f".{_f.stem}", __package__)
+logger = logging.getLogger(__name__)
+
+# Explicitly import all built-in preprocessor modules so their @preprocessor
+# decorators execute deterministically across all environments (including Android).
+try:
+    from . import simple
+except Exception as exc:
+    logger.warning(f"Failed to import simple preprocessors: {exc}")
