@@ -50,6 +50,18 @@ class MockModelMetadata:
 def mock_get_available_providers():
     return ["CPUExecutionProvider"]
 
+ONNX_JAVA_TYPE_TO_NUMPY = {
+    'FLOAT': np.float32,
+    'DOUBLE': np.float64,
+    'INT8': np.int8,
+    'UINT8': np.uint8,
+    'INT16': np.int16,
+    'INT32': np.int32,
+    'INT64': np.int64,
+    'BOOL': np.bool_,
+    'FLOAT16': np.float16,
+}
+
 def _extract_onnx_value(val_obj):
     if val_obj is None:
         return None
@@ -67,10 +79,43 @@ def _extract_onnx_value(val_obj):
             val_obj = val_obj.getValue()
     except Exception:
         pass
-    # Extract underlying ndarray/buffer from OnnxValue
+
+    # Method 1: Try direct ByteBuffer extraction for OnnxTensor
+    if hasattr(val_obj, "getInfo") and hasattr(val_obj, "getByteBuffer"):
+        try:
+            info = val_obj.getInfo()
+            shape = [int(s) for s in info.getShape()]
+            type_str = str(getattr(info, "type", "FLOAT"))
+            if "." in type_str:
+                type_str = type_str.split(".")[-1]
+            target_dtype = ONNX_JAVA_TYPE_TO_NUMPY.get(type_str, np.float32)
+            
+            buf = val_obj.getByteBuffer()
+            if buf is not None:
+                if 'ByteOrder' in globals() and globals()['ByteOrder'] is not None:
+                    buf.order(ByteOrder.nativeOrder())
+                cap = int(buf.capacity())
+                dst = bytearray(cap)
+                buf.position(0)
+                buf.get(dst)
+                return np.frombuffer(dst, dtype=target_dtype).reshape(shape)
+        except Exception as exc:
+            logger.debug(f"Direct ByteBuffer output extraction failed ({exc}), falling back to getValue()")
+
+    # Method 2: Extract underlying ndarray/buffer from OnnxValue via getValue()
     if hasattr(val_obj, "getValue"):
         raw = val_obj.getValue()
-        return np.array(raw)
+        try:
+            res = np.array(raw)
+            if res.dtype == object and hasattr(raw, "__len__"):
+                def _to_nested_list(obj):
+                    if hasattr(obj, '__len__') and not isinstance(obj, (str, bytes)):
+                        return [_to_nested_list(x) for x in obj]
+                    return obj
+                res = np.array(_to_nested_list(raw))
+            return res
+        except Exception:
+            return np.array(raw)
     return np.array(val_obj)
 
 # ---------------------------------------------------------------------------
@@ -282,9 +327,19 @@ if is_android():
     HashMap = autoclass('java.util.HashMap')
     ByteBuffer = autoclass('java.nio.ByteBuffer')
     ByteOrder = autoclass('java.nio.ByteOrder')
+    FloatBuffer = autoclass('java.nio.FloatBuffer')
+    DoubleBuffer = autoclass('java.nio.DoubleBuffer')
+    LongBuffer = autoclass('java.nio.LongBuffer')
+    IntBuffer = autoclass('java.nio.IntBuffer')
+    ShortBuffer = autoclass('java.nio.ShortBuffer')
     
     # Pre-cache optional / nested classes safely
     for _cls in [
+        'java.nio.FloatBuffer',
+        'java.nio.DoubleBuffer',
+        'java.nio.LongBuffer',
+        'java.nio.IntBuffer',
+        'java.nio.ShortBuffer',
         'ai.onnxruntime.OrtSession$RunOptions',
         'ai.onnxruntime.OrtSession$SessionOptions$ExecutionMode',
         'ai.onnxruntime.OrtSession$SessionOptions$OptLevel',
@@ -358,19 +413,48 @@ if is_android():
             return {"CPUExecutionProvider": {}}
                 
         def _create_java_tensor(self, np_array: np.ndarray):
+            init_android_thread_classloader()
             arr = np.ascontiguousarray(np_array)
             shape = [int(s) for s in arr.shape]
             try:
-                type_name = NUMPY_TO_ONNX_JAVA_TYPE.get(arr.dtype.name, 'FLOAT')
-                java_type = getattr(OnnxJavaType, type_name, OnnxJavaType.FLOAT)
                 raw_bytes = bytearray(arr.tobytes())
-                buf = ByteBuffer.wrap(raw_bytes)
+                buf = ByteBuffer.allocateDirect(len(raw_bytes))
                 buf.order(ByteOrder.nativeOrder())
-                return OnnxTensor.createTensor(self.env, buf, shape, java_type)
+                if len(raw_bytes) > 0:
+                    buf.put(raw_bytes)
+                buf.position(0)
+
+                dtype_name = arr.dtype.name
+                if dtype_name == 'float32':
+                    return OnnxTensor.createTensor(self.env, buf.asFloatBuffer(), shape)
+                elif dtype_name == 'int64':
+                    return OnnxTensor.createTensor(self.env, buf.asLongBuffer(), shape)
+                elif dtype_name == 'int32':
+                    return OnnxTensor.createTensor(self.env, buf.asIntBuffer(), shape)
+                elif dtype_name == 'float64':
+                    return OnnxTensor.createTensor(self.env, buf.asDoubleBuffer(), shape)
+                elif dtype_name == 'int16':
+                    return OnnxTensor.createTensor(self.env, buf.asShortBuffer(), shape)
+                elif dtype_name == 'bool':
+                    return OnnxTensor.createTensor(self.env, buf, shape, OnnxJavaType.BOOL)
+                elif dtype_name == 'uint8':
+                    return OnnxTensor.createTensor(self.env, buf, shape, OnnxJavaType.UINT8)
+                elif dtype_name == 'int8':
+                    return OnnxTensor.createTensor(self.env, buf, shape, OnnxJavaType.INT8)
+                elif dtype_name == 'float16':
+                    return OnnxTensor.createTensor(self.env, buf, shape, OnnxJavaType.FLOAT16)
+                else:
+                    type_name = NUMPY_TO_ONNX_JAVA_TYPE.get(dtype_name, 'FLOAT')
+                    java_type = getattr(OnnxJavaType, type_name, OnnxJavaType.FLOAT)
+                    return OnnxTensor.createTensor(self.env, buf, shape, java_type)
             except Exception as exc:
-                logger.debug(f"Direct ByteBuffer tensor creation failed ({exc}), falling back to nested list")
-                nested_list = arr.tolist()
-                return OnnxTensor.createTensor(self.env, nested_list)
+                logger.error(f"Direct buffer OnnxTensor creation failed for shape={shape}, dtype={arr.dtype}: {exc}")
+                if arr.ndim <= 1:
+                    try:
+                        return OnnxTensor.createTensor(self.env, arr.tolist())
+                    except Exception as fallback_exc:
+                        logger.error(f"Fallback 1D list tensor creation also failed: {fallback_exc}")
+                raise
 
         def run(self, output_names, input_feed: dict, run_options=None):
             init_android_thread_classloader()
