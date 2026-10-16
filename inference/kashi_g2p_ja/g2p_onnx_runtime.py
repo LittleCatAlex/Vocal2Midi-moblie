@@ -38,8 +38,8 @@ import numpy as np
 
 try:
     import onnxruntime as ort
-except ImportError as exc:  # pragma: no cover
-    raise SystemExit("pip install onnxruntime-directml numpy") from exc
+except ImportError:
+    ort = None
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parents[1]

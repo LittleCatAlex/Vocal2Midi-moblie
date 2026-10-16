@@ -393,6 +393,10 @@ if is_android():
     ShortBuffer = autoclass('java.nio.ShortBuffer')
     Array = autoclass('java.lang.reflect.Array')
     Long = autoclass('java.lang.Long')
+    Float = autoclass('java.lang.Float')
+    Double = autoclass('java.lang.Double')
+    Integer = autoclass('java.lang.Integer')
+    Boolean = autoclass('java.lang.Boolean')
 
     def _to_java_long_array(shape_list):
         j_arr = Array.newInstance(Long.TYPE, len(shape_list))
@@ -541,8 +545,48 @@ if is_android():
                 if arr.dtype == np.float64:
                     arr = np.ascontiguousarray(arr, dtype=np.float32)
 
+            dtype_name = arr.dtype.name
+
+            # Special handling for 0-D scalar tensors (e.g. threshold, radius in GAME models)
+            if arr.ndim == 0:
+                val = arr.item()
+                try:
+                    if dtype_name in ('float32', 'float64'):
+                        if expected_type and "double" in expected_type.lower():
+                            return OnnxTensor.createTensor(self.env, Double.valueOf(float(val)))
+                        return OnnxTensor.createTensor(self.env, Float.valueOf(float(val)))
+                    elif dtype_name == 'int64':
+                        return OnnxTensor.createTensor(self.env, Long.valueOf(int(val)))
+                    elif dtype_name == 'int32':
+                        return OnnxTensor.createTensor(self.env, Integer.valueOf(int(val)))
+                    elif dtype_name == 'bool':
+                        return OnnxTensor.createTensor(self.env, Boolean.valueOf(bool(val)))
+                except Exception as exc:
+                    logger.debug(f"Direct boxed scalar OnnxTensor creation failed ({exc}), falling back to empty shape buffer")
+
+                try:
+                    j_shape = Array.newInstance(Long.TYPE, 0)
+                    raw_bytes = bytearray(arr.tobytes())
+                    buf = ByteBuffer.allocateDirect(len(raw_bytes))
+                    buf.order(ByteOrder.nativeOrder())
+                    if len(raw_bytes) > 0:
+                        buf.put(raw_bytes)
+                    buf.position(0)
+                    if dtype_name in ('float32', 'float64'):
+                        return OnnxTensor.createTensor(self.env, buf.asFloatBuffer(), j_shape)
+                    elif dtype_name == 'int64':
+                        return OnnxTensor.createTensor(self.env, buf.asLongBuffer(), j_shape)
+                    elif dtype_name == 'int32':
+                        return OnnxTensor.createTensor(self.env, buf.asIntBuffer(), j_shape)
+                    elif dtype_name == 'bool':
+                        return OnnxTensor.createTensor(self.env, buf, j_shape, OnnxJavaType.BOOL)
+                except Exception as scalar_exc:
+                    logger.error(f"Scalar tensor creation failed: {repr(scalar_exc)}\n{traceback.format_exc()}")
+                    raise
+
+            # Multi-dimensional tensors (1D, 2D, 3D...):
+            # Must pass shape as a standard Python list so PyJNIus natively converts it to Java long[].
             shape = [int(s) for s in arr.shape]
-            j_shape = _to_java_long_array(shape)
             try:
                 raw_bytes = bytearray(arr.tobytes())
                 buf = ByteBuffer.allocateDirect(len(raw_bytes))
@@ -551,29 +595,28 @@ if is_android():
                     buf.put(raw_bytes)
                 buf.position(0)
 
-                dtype_name = arr.dtype.name
                 if dtype_name == 'float32':
-                    return OnnxTensor.createTensor(self.env, buf.asFloatBuffer(), j_shape)
+                    return OnnxTensor.createTensor(self.env, buf.asFloatBuffer(), shape)
                 elif dtype_name == 'int64':
-                    return OnnxTensor.createTensor(self.env, buf.asLongBuffer(), j_shape)
+                    return OnnxTensor.createTensor(self.env, buf.asLongBuffer(), shape)
                 elif dtype_name == 'int32':
-                    return OnnxTensor.createTensor(self.env, buf.asIntBuffer(), j_shape)
+                    return OnnxTensor.createTensor(self.env, buf.asIntBuffer(), shape)
                 elif dtype_name == 'float64':
-                    return OnnxTensor.createTensor(self.env, buf.asDoubleBuffer(), j_shape)
+                    return OnnxTensor.createTensor(self.env, buf.asDoubleBuffer(), shape)
                 elif dtype_name == 'int16':
-                    return OnnxTensor.createTensor(self.env, buf.asShortBuffer(), j_shape)
+                    return OnnxTensor.createTensor(self.env, buf.asShortBuffer(), shape)
                 elif dtype_name == 'bool':
-                    return OnnxTensor.createTensor(self.env, buf, j_shape, OnnxJavaType.BOOL)
+                    return OnnxTensor.createTensor(self.env, buf, shape, OnnxJavaType.BOOL)
                 elif dtype_name == 'uint8':
-                    return OnnxTensor.createTensor(self.env, buf, j_shape, OnnxJavaType.UINT8)
+                    return OnnxTensor.createTensor(self.env, buf, shape, OnnxJavaType.UINT8)
                 elif dtype_name == 'int8':
-                    return OnnxTensor.createTensor(self.env, buf, j_shape, OnnxJavaType.INT8)
+                    return OnnxTensor.createTensor(self.env, buf, shape, OnnxJavaType.INT8)
                 elif dtype_name == 'float16':
-                    return OnnxTensor.createTensor(self.env, buf, j_shape, OnnxJavaType.FLOAT16)
+                    return OnnxTensor.createTensor(self.env, buf, shape, OnnxJavaType.FLOAT16)
                 else:
                     type_name = NUMPY_TO_ONNX_JAVA_TYPE.get(dtype_name, 'FLOAT')
                     java_type = getattr(OnnxJavaType, type_name, OnnxJavaType.FLOAT)
-                    return OnnxTensor.createTensor(self.env, buf, j_shape, java_type)
+                    return OnnxTensor.createTensor(self.env, buf, shape, java_type)
             except Exception as exc:
                 logger.error(f"Direct buffer OnnxTensor creation failed for shape={shape}, dtype={arr.dtype}: {repr(exc)}\n{traceback.format_exc()}")
                 if arr.ndim == 1:
@@ -607,24 +650,21 @@ if is_android():
                 
                 out_list = []
                 if output_names:
-                    names_to_fetch = list(output_names)
-                else:
-                    names_to_fetch = [o.name for o in self.get_outputs() if hasattr(o, 'name')]
-
-                if names_to_fetch:
-                    for name in names_to_fetch:
+                    for name in output_names:
                         java_val = result.get(name)
                         out_list.append(_extract_onnx_value(java_val))
                 else:
+                    # When output_names is None, return all outputs in native graph index order
                     try:
                         n_outs = result.size()
                         for i in range(n_outs):
                             out_list.append(_extract_onnx_value(result.get(i)))
-                    except Exception:
-                        iterator = result.iterator()
-                        while iterator.hasNext():
-                            entry = iterator.next()
-                            out_list.append(_extract_onnx_value(entry))
+                    except Exception as e:
+                        logger.debug(f"result.get(i) iteration failed: {e}, falling back to names")
+                        names_to_fetch = [o.name for o in self.get_outputs() if hasattr(o, 'name')]
+                        for name in names_to_fetch:
+                            java_val = result.get(name)
+                            out_list.append(_extract_onnx_value(java_val))
                 
                 result.close()
                 return out_list

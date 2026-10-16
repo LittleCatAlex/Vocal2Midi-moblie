@@ -114,8 +114,10 @@ def run_auto_lyric_job(cfg: PipelineConfig):
 
     try:
         auto_lyric_hybrid_pipeline(**cfg.to_kwargs())
-    except InterruptedError:
+    except (InterruptedError, KeyboardInterrupt):
         raise CancellationError("Pipeline was interrupted by user.") from None
+    except SystemExit as e:
+        raise Vocal2MidiError(f"Pipeline terminated: SystemExit({e})") from None
     except Vocal2MidiError:
         raise
     except Exception as e:

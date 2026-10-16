@@ -19,6 +19,8 @@ import traceback
 from kivy.app import App
 from kivy.clock import Clock
 
+logger = logging.getLogger("vocal2midi.main")
+
 from inference.ort_android_wrapper import inject_ort_mock, init_android_thread_classloader
 inject_ort_mock()
 
@@ -439,7 +441,9 @@ class Vocal2MidiApp(App):
         Clock.schedule_once(_apply, 0)
 
     def _set_running(self, running: bool):
-        Clock.schedule_once(lambda _dt: setattr(self, "is_running", running), 0)
+        def _apply(_dt):
+            self.is_running = running
+        Clock.schedule_once(_apply, 0)
 
     # ------------------------------------------------------- config build
     def _collect_values(self) -> dict:
@@ -542,6 +546,7 @@ class Vocal2MidiApp(App):
         root_logger.addHandler(handler)
         root_logger.setLevel(logging.INFO)
         session = None
+        task_succeeded = False
         try:
             try:
                 from application.exceptions import CancellationError
@@ -574,20 +579,29 @@ class Vocal2MidiApp(App):
                     self.log(tr("worker_cancelled"))
                     self._set_status(tr("worker_cancelled"))
                 else:
+                    task_succeeded = True
                     self.log(tr("worker_success", d=values["output_dir"]))
                     self._set_status(tr("worker_success", d=values["output_dir"]), 100)
             except (InterruptedError, CancellationError):
                 self.log(tr("worker_stopped"))
                 self._set_status(tr("worker_stopped"))
-        except Exception as exc:
-            tb = traceback.format_exc()
-            err_msg = f"{repr(exc)}\n{tb}"
-            logger.error(f"Fatal worker exception:\n{err_msg}")
-            self.log(tr("worker_error", tb=err_msg))
-            self._set_status(f"{tr('worker_error', tb='').strip()}: {repr(exc)}")
+        except BaseException as exc:
+            try:
+                tb = traceback.format_exc()
+                err_msg = f"{type(exc).__name__}: {repr(exc)}\n{tb}"
+                logger.error(f"Fatal worker exception:\n{err_msg}")
+                if getattr(self, "_file_logger", None) is not None:
+                    self._file_logger.write(f"\n[FATAL ERROR] {err_msg}\n")
+                self.log(tr("worker_error", tb=err_msg))
+                self._set_status(f"{tr('worker_error', tb='').strip()}: {type(exc).__name__}: {repr(exc)}")
+            except Exception:
+                pass
         finally:
-            root_logger.removeHandler(handler)
-            root_logger.setLevel(old_level)
+            try:
+                root_logger.removeHandler(handler)
+                root_logger.setLevel(old_level)
+            except Exception:
+                pass
             if session is not None:
                 try:
                     session.close()
@@ -603,9 +617,15 @@ class Vocal2MidiApp(App):
             except Exception:
                 pass
             if getattr(self, "_file_logger", None) is not None:
-                self._file_logger.close()
+                try:
+                    self._file_logger.close()
+                except Exception:
+                    pass
                 self._file_logger = None
-            self._set_running(False)
+            try:
+                self._set_running(False)
+            except Exception:
+                pass
 
 
 def main():
