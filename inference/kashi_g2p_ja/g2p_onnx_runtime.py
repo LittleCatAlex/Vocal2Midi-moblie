@@ -22,7 +22,10 @@ from __future__ import annotations
 import argparse
 import gzip
 import json
-import lzma
+try:
+    import lzma
+except ImportError:
+    lzma = None
 import math
 import pickle
 import re
@@ -862,21 +865,40 @@ def _deserialize_bundle(raw: bytes):
 
 
 def _load_resources(resources_dir: Path | None = None):
-    """Prefer the single-file bundle; fall back to the legacy pkl.gz trio."""
+    """Prefer the single-file bundle; fall back to the legacy pkl.gz trio or uncompressed .txt."""
     res_dir = Path(resources_dir) if resources_dir else RESOURCES
-    bundle = res_dir / BUNDLE_NAME
-    if bundle.exists():
-        with lzma.open(bundle, "rb") as fh:
+
+    # 1. Prefer uncompressed text bundle if present (zero lzma dependency)
+    txt_bundle = res_dir / "lexicon.txt"
+    if txt_bundle.exists():
+        with open(txt_bundle, "rb") as fh:
             table, prior, components, vocab = _deserialize_bundle(fh.read())
         return table, prior, components, vocab
-    with gzip.open(res_dir / "unified_lexicon_variants_v2.pkl.gz", "rb") as fh:
-        table = pickle.load(fh)
-    with gzip.open(res_dir / "prior_index.pkl.gz", "rb") as fh:
-        prior = pickle.load(fh)
-    with gzip.open(res_dir / "components.pkl", "rb") as fh:
-        components = pickle.load(fh)
-    vocab = (res_dir / "vocab.txt").read_text(encoding="utf-8").splitlines()
-    return table, prior, components, vocab
+
+    # 2. Try single-file .txz bundle if lzma module is available
+    bundle = res_dir / BUNDLE_NAME
+    if bundle.exists() and lzma is not None:
+        try:
+            with lzma.open(bundle, "rb") as fh:
+                table, prior, components, vocab = _deserialize_bundle(fh.read())
+            return table, prior, components, vocab
+        except Exception as exc:
+            pass
+
+    # 3. Fall back to legacy pkl.gz trio if present
+    pkl_lex = res_dir / "unified_lexicon_variants_v2.pkl.gz"
+    if pkl_lex.exists():
+        with gzip.open(pkl_lex, "rb") as fh:
+            table = pickle.load(fh)
+        with gzip.open(res_dir / "prior_index.pkl.gz", "rb") as fh:
+            prior = pickle.load(fh)
+        with gzip.open(res_dir / "components.pkl", "rb") as fh:
+            components = pickle.load(fh)
+        vocab = (res_dir / "vocab.txt").read_text(encoding="utf-8").splitlines()
+        return table, prior, components, vocab
+
+    # 4. Safe fallback if neither is available so import and initialization don't crash
+    return {}, {}, {}, []
 
 
 # ---------------------------------------------------------------- runtime

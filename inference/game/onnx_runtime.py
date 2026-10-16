@@ -1,5 +1,6 @@
 import json
 import logging
+import traceback
 from pathlib import Path
 
 import numpy as np
@@ -74,16 +75,20 @@ class GameOnnxModel:
         ts = list(ts or [])
         batch_size = int(waveforms.shape[0])
 
-        enc_out = self._sessions["encoder"].run(
-            None,
-            {
-                "waveform": waveforms.astype(np.float32, copy=False),
-                "duration": durations.astype(np.float32, copy=False),
-            },
-        )
-        x_seg = np.asarray(enc_out[0], dtype=np.float32)
-        x_est = np.asarray(enc_out[1], dtype=np.float32)
-        mask_t = np.asarray(enc_out[2], dtype=bool)
+        try:
+            enc_out = self._sessions["encoder"].run(
+                None,
+                {
+                    "waveform": waveforms.astype(np.float32, copy=False),
+                    "duration": durations.astype(np.float32, copy=False),
+                },
+            )
+            x_seg = np.asarray(enc_out[0], dtype=np.float32)
+            x_est = np.asarray(enc_out[1], dtype=np.float32)
+            mask_t = np.asarray(enc_out[2], dtype=bool)
+        except Exception as e:
+            logger.error(f"GAME sub-model 'encoder' failed: {repr(e)}\n{traceback.format_exc()}")
+            raise
 
         if known_durations is not None and known_durations.size > 0:
             known_boundaries = np.zeros_like(mask_t, dtype=bool)
@@ -91,22 +96,42 @@ class GameOnnxModel:
                 valid = known_durations[idx][known_durations[idx] > 0]
                 if len(valid) == 0:
                     continue
-                kb = self._sessions["dur2bd"].run(
-                    None,
-                    {
-                        "durations": valid[np.newaxis, :].astype(np.float32, copy=False),
-                        "maskT": mask_t[idx : idx + 1].astype(bool, copy=False),
-                    },
-                )[0]
-                known_boundaries[idx : idx + 1] = np.asarray(kb, dtype=bool)
+                try:
+                    kb = self._sessions["dur2bd"].run(
+                        None,
+                        {
+                            "durations": valid[np.newaxis, :].astype(np.float32, copy=False),
+                            "maskT": mask_t[idx : idx + 1].astype(bool, copy=False),
+                        },
+                    )[0]
+                    known_boundaries[idx : idx + 1] = np.asarray(kb, dtype=bool)
+                except Exception as e:
+                    logger.error(f"GAME sub-model 'dur2bd' failed: {repr(e)}\n{traceback.format_exc()}")
+                    raise
         else:
             known_boundaries = np.zeros_like(mask_t, dtype=bool)
 
         boundaries = known_boundaries.copy()
         lang_arr = np.full((batch_size,), int(language), dtype=np.int64)
 
-        if self.loop and ts:
-            for t in ts:
+        try:
+            if self.loop and ts:
+                for t in ts:
+                    boundaries = self._sessions["segmenter"].run(
+                        None,
+                        {
+                            "x_seg": x_seg.astype(np.float32, copy=False),
+                            "language": lang_arr,
+                            "known_boundaries": known_boundaries.astype(bool, copy=False),
+                            "prev_boundaries": boundaries.astype(bool, copy=False),
+                            "t": np.full((batch_size,), float(t), dtype=np.float32),
+                            "maskT": mask_t.astype(bool, copy=False),
+                            "threshold": np.array(boundary_threshold, dtype=np.float32),
+                            "radius": np.array(boundary_radius, dtype=np.int64),
+                        },
+                    )[0]
+                    boundaries = np.asarray(boundaries, dtype=bool)
+            else:
                 boundaries = self._sessions["segmenter"].run(
                     None,
                     {
@@ -114,51 +139,47 @@ class GameOnnxModel:
                         "language": lang_arr,
                         "known_boundaries": known_boundaries.astype(bool, copy=False),
                         "prev_boundaries": boundaries.astype(bool, copy=False),
-                        "t": np.full((batch_size,), float(t), dtype=np.float32),
+                        "t": np.zeros((batch_size,), dtype=np.float32),
                         "maskT": mask_t.astype(bool, copy=False),
                         "threshold": np.array(boundary_threshold, dtype=np.float32),
                         "radius": np.array(boundary_radius, dtype=np.int64),
                     },
                 )[0]
                 boundaries = np.asarray(boundaries, dtype=bool)
-        else:
-            boundaries = self._sessions["segmenter"].run(
+        except Exception as e:
+            logger.error(f"GAME sub-model 'segmenter' failed: {repr(e)}\n{traceback.format_exc()}")
+            raise
+
+        try:
+            durations_out, mask_n = self._sessions["bd2dur"].run(
                 None,
                 {
-                    "x_seg": x_seg.astype(np.float32, copy=False),
-                    "language": lang_arr,
-                    "known_boundaries": known_boundaries.astype(bool, copy=False),
-                    "prev_boundaries": boundaries.astype(bool, copy=False),
-                    "t": np.zeros((batch_size,), dtype=np.float32),
+                    "boundaries": boundaries.astype(bool, copy=False),
                     "maskT": mask_t.astype(bool, copy=False),
-                    "threshold": np.array(boundary_threshold, dtype=np.float32),
-                    "radius": np.array(boundary_radius, dtype=np.int64),
                 },
-            )[0]
-            boundaries = np.asarray(boundaries, dtype=bool)
+            )
+            durations_out = np.asarray(durations_out, dtype=np.float32)
+            mask_n = np.asarray(mask_n, dtype=bool)
+        except Exception as e:
+            logger.error(f"GAME sub-model 'bd2dur' failed: {repr(e)}\n{traceback.format_exc()}")
+            raise
 
-        durations_out, mask_n = self._sessions["bd2dur"].run(
-            None,
-            {
-                "boundaries": boundaries.astype(bool, copy=False),
-                "maskT": mask_t.astype(bool, copy=False),
-            },
-        )
-        durations_out = np.asarray(durations_out, dtype=np.float32)
-        mask_n = np.asarray(mask_n, dtype=bool)
-
-        presence, scores = self._sessions["estimator"].run(
-            None,
-            {
-                "x_est": x_est.astype(np.float32, copy=False),
-                "boundaries": boundaries.astype(bool, copy=False),
-                "maskT": mask_t.astype(bool, copy=False),
-                "maskN": mask_n.astype(bool, copy=False),
-                "threshold": np.array(score_threshold, dtype=np.float32),
-            },
-        )
-        presence = np.asarray(presence, dtype=bool)
-        scores = np.asarray(scores, dtype=np.float32)
+        try:
+            presence, scores = self._sessions["estimator"].run(
+                None,
+                {
+                    "x_est": x_est.astype(np.float32, copy=False),
+                    "boundaries": boundaries.astype(bool, copy=False),
+                    "maskT": mask_t.astype(bool, copy=False),
+                    "maskN": mask_n.astype(bool, copy=False),
+                    "threshold": np.array(score_threshold, dtype=np.float32),
+                },
+            )
+            presence = np.asarray(presence, dtype=bool)
+            scores = np.asarray(scores, dtype=np.float32)
+        except Exception as e:
+            logger.error(f"GAME sub-model 'estimator' failed: {repr(e)}\n{traceback.format_exc()}")
+            raise
 
         results = []
         for idx in range(batch_size):

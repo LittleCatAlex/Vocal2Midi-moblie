@@ -91,10 +91,12 @@ def _extract_onnx_value(val_obj):
     except Exception:
         pass
 
-    target_dtype = None
+    shape = None
     if hasattr(val_obj, "getInfo"):
         try:
             info = val_obj.getInfo()
+            if hasattr(info, "getShape"):
+                shape = tuple(int(s) for s in info.getShape())
             type_obj = getattr(info, "type", None)
             if type_obj is None and hasattr(info, "getType"):
                 type_obj = info.getType()
@@ -109,10 +111,7 @@ def _extract_onnx_value(val_obj):
     # Method 1: Try direct ByteBuffer extraction for OnnxTensor
     if hasattr(val_obj, "getInfo") and hasattr(val_obj, "getByteBuffer"):
         try:
-            info = val_obj.getInfo()
-            shape = [int(s) for s in info.getShape()]
-            eff_dtype = target_dtype or np.float32
-            
+            eff_dtype = target_dtype if target_dtype is not None else np.float32
             buf = val_obj.getByteBuffer()
             if buf is not None:
                 BO = globals().get('ByteOrder')
@@ -126,7 +125,10 @@ def _extract_onnx_value(val_obj):
                 buf.position(0)
                 if cap > 0:
                     buf.get(dst)
-                return np.frombuffer(dst, dtype=eff_dtype).reshape(shape)
+                arr = np.frombuffer(dst, dtype=eff_dtype)
+                if shape is not None:
+                    arr = arr.reshape(shape)
+                return arr
         except Exception as exc:
             logger.debug(f"Direct ByteBuffer output extraction failed ({exc}), falling back to getValue()")
 
@@ -145,6 +147,11 @@ def _extract_onnx_value(val_obj):
                 res = res.astype(target_dtype, copy=False)
             elif res.dtype == np.float64:
                 res = res.astype(np.float32, copy=False)
+            if shape is not None and res.shape != shape:
+                try:
+                    res = res.reshape(shape)
+                except Exception:
+                    pass
             return res
         except Exception:
             res = np.array(raw)
@@ -152,12 +159,22 @@ def _extract_onnx_value(val_obj):
                 res = res.astype(target_dtype, copy=False)
             elif res.dtype == np.float64:
                 res = res.astype(np.float32, copy=False)
+            if shape is not None and res.shape != shape:
+                try:
+                    res = res.reshape(shape)
+                except Exception:
+                    pass
             return res
     res = np.array(val_obj)
     if target_dtype is not None:
         res = res.astype(target_dtype, copy=False)
     elif res.dtype == np.float64:
         res = res.astype(np.float32, copy=False)
+    if shape is not None and res.shape != shape:
+        try:
+            res = res.reshape(shape)
+        except Exception:
+            pass
     return res
 
 # ---------------------------------------------------------------------------
@@ -374,6 +391,14 @@ if is_android():
     LongBuffer = autoclass('java.nio.LongBuffer')
     IntBuffer = autoclass('java.nio.IntBuffer')
     ShortBuffer = autoclass('java.nio.ShortBuffer')
+    Array = autoclass('java.lang.reflect.Array')
+    Long = autoclass('java.lang.Long')
+
+    def _to_java_long_array(shape_list):
+        j_arr = Array.newInstance(Long.TYPE, len(shape_list))
+        for i, dim in enumerate(shape_list):
+            Array.setLong(j_arr, i, int(dim))
+        return j_arr
     
     # Pre-cache optional / nested classes safely
     for _cls in [
@@ -517,6 +542,7 @@ if is_android():
                     arr = np.ascontiguousarray(arr, dtype=np.float32)
 
             shape = [int(s) for s in arr.shape]
+            j_shape = _to_java_long_array(shape)
             try:
                 raw_bytes = bytearray(arr.tobytes())
                 buf = ByteBuffer.allocateDirect(len(raw_bytes))
@@ -527,34 +553,34 @@ if is_android():
 
                 dtype_name = arr.dtype.name
                 if dtype_name == 'float32':
-                    return OnnxTensor.createTensor(self.env, buf.asFloatBuffer(), shape)
+                    return OnnxTensor.createTensor(self.env, buf.asFloatBuffer(), j_shape)
                 elif dtype_name == 'int64':
-                    return OnnxTensor.createTensor(self.env, buf.asLongBuffer(), shape)
+                    return OnnxTensor.createTensor(self.env, buf.asLongBuffer(), j_shape)
                 elif dtype_name == 'int32':
-                    return OnnxTensor.createTensor(self.env, buf.asIntBuffer(), shape)
+                    return OnnxTensor.createTensor(self.env, buf.asIntBuffer(), j_shape)
                 elif dtype_name == 'float64':
-                    return OnnxTensor.createTensor(self.env, buf.asDoubleBuffer(), shape)
+                    return OnnxTensor.createTensor(self.env, buf.asDoubleBuffer(), j_shape)
                 elif dtype_name == 'int16':
-                    return OnnxTensor.createTensor(self.env, buf.asShortBuffer(), shape)
+                    return OnnxTensor.createTensor(self.env, buf.asShortBuffer(), j_shape)
                 elif dtype_name == 'bool':
-                    return OnnxTensor.createTensor(self.env, buf, shape, OnnxJavaType.BOOL)
+                    return OnnxTensor.createTensor(self.env, buf, j_shape, OnnxJavaType.BOOL)
                 elif dtype_name == 'uint8':
-                    return OnnxTensor.createTensor(self.env, buf, shape, OnnxJavaType.UINT8)
+                    return OnnxTensor.createTensor(self.env, buf, j_shape, OnnxJavaType.UINT8)
                 elif dtype_name == 'int8':
-                    return OnnxTensor.createTensor(self.env, buf, shape, OnnxJavaType.INT8)
+                    return OnnxTensor.createTensor(self.env, buf, j_shape, OnnxJavaType.INT8)
                 elif dtype_name == 'float16':
-                    return OnnxTensor.createTensor(self.env, buf, shape, OnnxJavaType.FLOAT16)
+                    return OnnxTensor.createTensor(self.env, buf, j_shape, OnnxJavaType.FLOAT16)
                 else:
                     type_name = NUMPY_TO_ONNX_JAVA_TYPE.get(dtype_name, 'FLOAT')
                     java_type = getattr(OnnxJavaType, type_name, OnnxJavaType.FLOAT)
-                    return OnnxTensor.createTensor(self.env, buf, shape, java_type)
+                    return OnnxTensor.createTensor(self.env, buf, j_shape, java_type)
             except Exception as exc:
-                logger.error(f"Direct buffer OnnxTensor creation failed for shape={shape}, dtype={arr.dtype}: {exc}")
-                if arr.ndim <= 1:
+                logger.error(f"Direct buffer OnnxTensor creation failed for shape={shape}, dtype={arr.dtype}: {repr(exc)}\n{traceback.format_exc()}")
+                if arr.ndim == 1:
                     try:
                         return OnnxTensor.createTensor(self.env, arr.tolist())
                     except Exception as fallback_exc:
-                        logger.error(f"Fallback 1D list tensor creation also failed: {fallback_exc}")
+                        logger.error(f"Fallback 1D list tensor creation also failed: {repr(fallback_exc)}")
                 raise
 
         def run(self, output_names, input_feed: dict, run_options=None):
@@ -581,7 +607,12 @@ if is_android():
                 
                 out_list = []
                 if output_names:
-                    for name in output_names:
+                    names_to_fetch = list(output_names)
+                else:
+                    names_to_fetch = [o.name for o in self.get_outputs() if hasattr(o, 'name')]
+
+                if names_to_fetch:
+                    for name in names_to_fetch:
                         java_val = result.get(name)
                         out_list.append(_extract_onnx_value(java_val))
                 else:

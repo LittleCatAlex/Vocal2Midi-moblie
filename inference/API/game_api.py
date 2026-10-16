@@ -225,9 +225,10 @@ def load_game_model(model_dir: str, device=None, use_cache: bool = True):
     try:
         model = GameOnnxModel(pathlib.Path(model_dir), requested_device=device)
     except Exception as e:
-        logger.error(f"Error loading GAME ONNX model from '{model_dir}': {e}", exc_info=True)
+        tb = traceback.format_exc()
+        logger.error(f"Error loading GAME ONNX model from '{model_dir}': {repr(e)}\n{tb}")
         raise RuntimeError(
-            f"Error loading GAME ONNX model: {e}\n"
+            f"Error loading GAME ONNX model: {repr(e)}\n"
             "Please ensure the GAME ONNX model directory and its contents are correct."
         )
 
@@ -438,8 +439,9 @@ def extract_pitches_and_align(
                 ts=ts,
                 language=language,
             )
-        except Exception:
-            logger.error("Error during GAME ONNX inference batch:", exc_info=True)
+        except Exception as e:
+            tb = traceback.format_exc()
+            logger.error(f"Error during GAME ONNX inference batch: {repr(e)}\n{tb}")
             raise
 
         for result, info in zip(batch_results, batch):
@@ -560,8 +562,9 @@ def extract_pitches_only(
                 ts=ts,
                 language=language,
             )
-        except Exception:
-            logger.error("Error during GAME ONNX inference batch (no-lyrics):", exc_info=True)
+        except Exception as e:
+            tb = traceback.format_exc()
+            logger.error(f"Error during GAME ONNX inference batch (no-lyrics): {repr(e)}\n{tb}")
             raise
 
         for result, info in zip(batch_results, batch):

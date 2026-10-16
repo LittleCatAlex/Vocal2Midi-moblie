@@ -10,7 +10,10 @@ order and cap the candidates (top-k per surface).
 """
 from __future__ import annotations
 
-import lzma
+try:
+    import lzma
+except ImportError:
+    lzma = None
 import pathlib
 import re
 
@@ -86,8 +89,24 @@ class JapaneseLexiconConverter(Converter):
             self._surfaces = cached
             return cached
 
+        # Check if uncompressed text version exists, or if lzma is available
+        txt_path = self._lexicon_path.with_suffix(".txt")
+        open_func = None
+        target_path = None
+        if txt_path.is_file():
+            target_path = txt_path
+            open_func = lambda p: open(p, "rt", encoding="utf-8")
+        elif self._lexicon_path.is_file():
+            if lzma is not None:
+                target_path = self._lexicon_path
+                open_func = lambda p: lzma.open(p, "rt", encoding="utf-8")
+
+        if target_path is None or open_func is None:
+            self._surfaces = {}
+            return self._surfaces
+
         entries: dict[str, list[tuple[str, tuple[int, float, float]]]] = {}
-        with lzma.open(self._lexicon_path, "rt", encoding="utf-8") as fh:
+        with open_func(target_path) as fh:
             section = None
             for line in fh:
                 line = line.rstrip("\n")

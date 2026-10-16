@@ -116,10 +116,12 @@ class _UiLogHandler(logging.Handler):
     def __init__(self, sink):
         super().__init__(level=logging.INFO)
         self.sink = sink
+        self.setFormatter(logging.Formatter("%(message)s"))
 
     def emit(self, record):
         try:
-            self.sink(record.getMessage())
+            msg = self.format(record)
+            self.sink(msg)
         except Exception:
             self.handleError(record)
 
@@ -577,11 +579,12 @@ class Vocal2MidiApp(App):
             except (InterruptedError, CancellationError):
                 self.log(tr("worker_stopped"))
                 self._set_status(tr("worker_stopped"))
-        except Exception:
+        except Exception as exc:
             tb = traceback.format_exc()
-            logger.error(f"Fatal worker exception:\n{tb}")
-            self.log(tr("worker_error", tb=tb))
-            self._set_status(tr("worker_error", tb="").strip())
+            err_msg = f"{repr(exc)}\n{tb}"
+            logger.error(f"Fatal worker exception:\n{err_msg}")
+            self.log(tr("worker_error", tb=err_msg))
+            self._set_status(f"{tr('worker_error', tb='').strip()}: {repr(exc)}")
         finally:
             root_logger.removeHandler(handler)
             root_logger.setLevel(old_level)
