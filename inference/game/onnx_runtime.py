@@ -1,10 +1,13 @@
 import json
+import logging
 from pathlib import Path
 
 import numpy as np
 import onnxruntime as ort
 
 from inference.device_utils import resolve_onnx_providers
+
+logger = logging.getLogger(__name__)
 
 
 class GameOnnxModel:
@@ -47,6 +50,7 @@ class GameOnnxModel:
             path = self.model_dir / filename
             if not path.exists():
                 raise FileNotFoundError(f"Required GAME ONNX file not found: {path}")
+            logger.info(f"Loading GAME sub-model '{key}' from '{path}'...")
             sessions[key] = ort.InferenceSession(str(path), sess_options=sess_options, providers=providers)
         return sessions
 
@@ -77,7 +81,9 @@ class GameOnnxModel:
                 "duration": durations.astype(np.float32, copy=False),
             },
         )
-        x_seg, x_est, mask_t = enc_out[0], enc_out[1], enc_out[2]
+        x_seg = np.asarray(enc_out[0], dtype=np.float32)
+        x_est = np.asarray(enc_out[1], dtype=np.float32)
+        mask_t = np.asarray(enc_out[2], dtype=bool)
 
         if known_durations is not None and known_durations.size > 0:
             known_boundaries = np.zeros_like(mask_t, dtype=bool)
@@ -89,10 +95,10 @@ class GameOnnxModel:
                     None,
                     {
                         "durations": valid[np.newaxis, :].astype(np.float32, copy=False),
-                        "maskT": mask_t[idx : idx + 1],
+                        "maskT": mask_t[idx : idx + 1].astype(bool, copy=False),
                     },
                 )[0]
-                known_boundaries[idx : idx + 1] = kb
+                known_boundaries[idx : idx + 1] = np.asarray(kb, dtype=bool)
         else:
             known_boundaries = np.zeros_like(mask_t, dtype=bool)
 
@@ -104,48 +110,55 @@ class GameOnnxModel:
                 boundaries = self._sessions["segmenter"].run(
                     None,
                     {
-                        "x_seg": x_seg,
+                        "x_seg": x_seg.astype(np.float32, copy=False),
                         "language": lang_arr,
-                        "known_boundaries": known_boundaries,
-                        "prev_boundaries": boundaries,
+                        "known_boundaries": known_boundaries.astype(bool, copy=False),
+                        "prev_boundaries": boundaries.astype(bool, copy=False),
                         "t": np.full((batch_size,), float(t), dtype=np.float32),
-                        "maskT": mask_t,
+                        "maskT": mask_t.astype(bool, copy=False),
                         "threshold": np.array(boundary_threshold, dtype=np.float32),
                         "radius": np.array(boundary_radius, dtype=np.int64),
                     },
                 )[0]
+                boundaries = np.asarray(boundaries, dtype=bool)
         else:
             boundaries = self._sessions["segmenter"].run(
                 None,
                 {
-                    "x_seg": x_seg,
+                    "x_seg": x_seg.astype(np.float32, copy=False),
                     "language": lang_arr,
-                    "known_boundaries": known_boundaries,
-                    "prev_boundaries": boundaries,
+                    "known_boundaries": known_boundaries.astype(bool, copy=False),
+                    "prev_boundaries": boundaries.astype(bool, copy=False),
                     "t": np.zeros((batch_size,), dtype=np.float32),
-                    "maskT": mask_t,
+                    "maskT": mask_t.astype(bool, copy=False),
                     "threshold": np.array(boundary_threshold, dtype=np.float32),
                     "radius": np.array(boundary_radius, dtype=np.int64),
                 },
             )[0]
+            boundaries = np.asarray(boundaries, dtype=bool)
 
         durations_out, mask_n = self._sessions["bd2dur"].run(
             None,
             {
-                "boundaries": boundaries,
-                "maskT": mask_t,
+                "boundaries": boundaries.astype(bool, copy=False),
+                "maskT": mask_t.astype(bool, copy=False),
             },
         )
+        durations_out = np.asarray(durations_out, dtype=np.float32)
+        mask_n = np.asarray(mask_n, dtype=bool)
+
         presence, scores = self._sessions["estimator"].run(
             None,
             {
-                "x_est": x_est,
-                "boundaries": boundaries,
-                "maskT": mask_t,
-                "maskN": mask_n,
+                "x_est": x_est.astype(np.float32, copy=False),
+                "boundaries": boundaries.astype(bool, copy=False),
+                "maskT": mask_t.astype(bool, copy=False),
+                "maskN": mask_n.astype(bool, copy=False),
                 "threshold": np.array(score_threshold, dtype=np.float32),
             },
         )
+        presence = np.asarray(presence, dtype=bool)
+        scores = np.asarray(scores, dtype=np.float32)
 
         results = []
         for idx in range(batch_size):

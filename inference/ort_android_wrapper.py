@@ -91,15 +91,27 @@ def _extract_onnx_value(val_obj):
     except Exception:
         pass
 
+    target_dtype = None
+    if hasattr(val_obj, "getInfo"):
+        try:
+            info = val_obj.getInfo()
+            type_obj = getattr(info, "type", None)
+            if type_obj is None and hasattr(info, "getType"):
+                type_obj = info.getType()
+            if type_obj is not None:
+                type_str = str(getattr(type_obj, "name", lambda: str(type_obj))()).upper()
+                if "." in type_str:
+                    type_str = type_str.split(".")[-1]
+                target_dtype = ONNX_JAVA_TYPE_TO_NUMPY.get(type_str)
+        except Exception:
+            pass
+
     # Method 1: Try direct ByteBuffer extraction for OnnxTensor
     if hasattr(val_obj, "getInfo") and hasattr(val_obj, "getByteBuffer"):
         try:
             info = val_obj.getInfo()
             shape = [int(s) for s in info.getShape()]
-            type_str = str(getattr(info, "type", "FLOAT"))
-            if "." in type_str:
-                type_str = type_str.split(".")[-1]
-            target_dtype = ONNX_JAVA_TYPE_TO_NUMPY.get(type_str, np.float32)
+            eff_dtype = target_dtype or np.float32
             
             buf = val_obj.getByteBuffer()
             if buf is not None:
@@ -114,7 +126,7 @@ def _extract_onnx_value(val_obj):
                 buf.position(0)
                 if cap > 0:
                     buf.get(dst)
-                return np.frombuffer(dst, dtype=target_dtype).reshape(shape)
+                return np.frombuffer(dst, dtype=eff_dtype).reshape(shape)
         except Exception as exc:
             logger.debug(f"Direct ByteBuffer output extraction failed ({exc}), falling back to getValue()")
 
@@ -129,10 +141,24 @@ def _extract_onnx_value(val_obj):
                         return [_to_nested_list(x) for x in obj]
                     return obj
                 res = np.array(_to_nested_list(raw))
+            if target_dtype is not None:
+                res = res.astype(target_dtype, copy=False)
+            elif res.dtype == np.float64:
+                res = res.astype(np.float32, copy=False)
             return res
         except Exception:
-            return np.array(raw)
-    return np.array(val_obj)
+            res = np.array(raw)
+            if target_dtype is not None:
+                res = res.astype(target_dtype, copy=False)
+            elif res.dtype == np.float64:
+                res = res.astype(np.float32, copy=False)
+            return res
+    res = np.array(val_obj)
+    if target_dtype is not None:
+        res = res.astype(target_dtype, copy=False)
+    elif res.dtype == np.float64:
+        res = res.astype(np.float32, copy=False)
+    return res
 
 # ---------------------------------------------------------------------------
 # Pure-Python ONNX Protobuf Metadata Extractor (Zero C/JNI/Protobuf dependency)
@@ -465,9 +491,31 @@ if is_android():
         def end_profiling(self):
             return ""
                 
-        def _create_java_tensor(self, np_array: np.ndarray):
+        def _create_java_tensor(self, np_array: np.ndarray, expected_type: str | None = None):
             init_android_thread_classloader()
             arr = np.ascontiguousarray(np_array)
+            # Safe dtype normalization for mobile inference:
+            # 1) If expected_type is specified, convert arr to match the model expectation.
+            # 2) If expected_type is not 'tensor(double)' and arr.dtype is float64 (NumPy default for floats),
+            #    convert to float32 because ONNX models on mobile universally expect tensor(float).
+            if expected_type:
+                exp = expected_type.lower()
+                if "float16" in exp and arr.dtype != np.float16:
+                    arr = np.ascontiguousarray(arr, dtype=np.float16)
+                elif "float" in exp and "float16" not in exp and arr.dtype != np.float32:
+                    arr = np.ascontiguousarray(arr, dtype=np.float32)
+                elif "double" in exp and arr.dtype != np.float64:
+                    arr = np.ascontiguousarray(arr, dtype=np.float64)
+                elif "int64" in exp and arr.dtype != np.int64:
+                    arr = np.ascontiguousarray(arr, dtype=np.int64)
+                elif "int32" in exp and arr.dtype != np.int32:
+                    arr = np.ascontiguousarray(arr, dtype=np.int32)
+                elif "bool" in exp and arr.dtype != np.bool_:
+                    arr = np.ascontiguousarray(arr, dtype=np.bool_)
+            else:
+                if arr.dtype == np.float64:
+                    arr = np.ascontiguousarray(arr, dtype=np.float32)
+
             shape = [int(s) for s in arr.shape]
             try:
                 raw_bytes = bytearray(arr.tobytes())
@@ -514,8 +562,18 @@ if is_android():
             java_map = HashMap()
             tensors_to_close = []
             try:
+                input_types = getattr(self, "_input_types", None)
+                if input_types is None:
+                    input_types = {}
+                    if hasattr(self, "_parsed_inputs") and self._parsed_inputs:
+                        for inp in self._parsed_inputs:
+                            if hasattr(inp, "name") and hasattr(inp, "type"):
+                                input_types[inp.name] = inp.type
+                    self._input_types = input_types
+
                 for k, v in input_feed.items():
-                    tensor = self._create_java_tensor(np.asarray(v))
+                    exp_type = input_types.get(k)
+                    tensor = self._create_java_tensor(np.asarray(v), expected_type=exp_type)
                     tensors_to_close.append(tensor)
                     java_map.put(k, tensor)
                 

@@ -57,9 +57,16 @@ class TifaModel:
         return int(self.config["win_size"])
 
     def run(self, name: str, feed: dict) -> dict:
+        import numpy as np
         session = self.sessions[name]
         names = [output.name for output in session.get_outputs()]
-        return dict(zip(names, session.run(None, feed)))
+        clean_feed = {}
+        for k, v in feed.items():
+            if isinstance(v, np.ndarray) and v.dtype == np.float64:
+                clean_feed[k] = v.astype(np.float32, copy=False)
+            else:
+                clean_feed[k] = v
+        return dict(zip(names, session.run(None, clean_feed)))
 
 
 _TIFA_MODEL_CACHE: dict[tuple[str, str], TifaModel] = {}

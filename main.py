@@ -142,6 +142,48 @@ class _StreamRedirector:
             self.stream.flush()
 
 
+class RunFileLogger:
+    """Thread-safe persistent logger that writes all outputs and errors to external storage."""
+
+    def __init__(self, log_path: pathlib.Path):
+        self.log_path = pathlib.Path(log_path)
+        self._file = None
+        self._lock = threading.Lock()
+        try:
+            self.log_path.parent.mkdir(parents=True, exist_ok=True)
+            self._file = open(str(self.log_path), "w", encoding="utf-8", buffering=1)
+            import datetime
+            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self._file.write(f"=== Vocal2Midi Run Log Started at {now_str} ===\n\n")
+            self._file.flush()
+        except Exception as exc:
+            logger.warning(f"Failed to open run log file {self.log_path}: {exc}")
+
+    def write(self, text: str):
+        with self._lock:
+            if self._file is not None:
+                try:
+                    self._file.write(str(text))
+                    if not str(text).endswith("\n"):
+                        self._file.write("\n")
+                    self._file.flush()
+                except Exception:
+                    pass
+
+    def close(self):
+        with self._lock:
+            if self._file is not None:
+                try:
+                    import datetime
+                    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    self._file.write(f"\n=== Vocal2Midi Run Log Finished at {now_str} ===\n")
+                    self._file.flush()
+                    self._file.close()
+                except Exception:
+                    pass
+                self._file = None
+
+
 class Vocal2MidiApp(App):
     lang = StringProperty(i18n.get_language())
     progress = NumericProperty(0)
@@ -236,11 +278,11 @@ class Vocal2MidiApp(App):
             self.log(f"all-files-access: {exc}")
 
     def ensure_storage_dirs(self):
-        """Create <root>/models/<each model dir> and <root>/outputs if missing."""
+        """Create <root>/models/<each model dir>, <root>/outputs, and <root>/logs if missing."""
         base = storage_root(self)
         created = []
         try:
-            for sub in [pathlib.Path("outputs")] + [
+            for sub in [pathlib.Path("outputs"), pathlib.Path("logs")] + [
                 pathlib.Path("models") / name for name in model_subdirs().values()
             ]:
                 target = base / sub
@@ -370,12 +412,20 @@ class Vocal2MidiApp(App):
     # ----------------------------------------------------------------- log
     def log(self, message: str):
         """Thread-safe: may be called from any thread."""
-        Clock.schedule_once(lambda _dt: self._append_log(str(message)), 0)
+        text = str(message)
+        file_logger = getattr(self, "_file_logger", None)
+        if file_logger is not None:
+            file_logger.write(text)
+        Clock.schedule_once(lambda _dt: self._append_log(text), 0)
 
     def _append_log(self, message: str):
-        self._log_lines.append(message)
-        self._log_lines = self._log_lines[-300:]
-        if self.root is not None:
+        for line in message.splitlines():
+            line_str = line.rstrip()
+            if line_str:
+                self._log_lines.append(line_str)
+        # Keep maximum 120 lines in UI to prevent OpenGL texture allocation exceeding GL_MAX_TEXTURE_SIZE
+        self._log_lines = self._log_lines[-120:]
+        if self.root is not None and hasattr(self.root.ids, "log_label"):
             self.root.ids.log_label.text = "\n".join(self._log_lines)
 
     def _set_status(self, text: str, progress: float | None = None):
@@ -452,6 +502,9 @@ class Vocal2MidiApp(App):
         if not self.audio_files:
             self.log(tr("err_no_audio"))
             return
+        self._log_lines = []
+        if self.root is not None and hasattr(self.root.ids, "log_label"):
+            self.root.ids.log_label.text = ""
         values = self._collect_values()
         files = list(self.audio_files)
         self._stop_event.clear()
@@ -471,6 +524,13 @@ class Vocal2MidiApp(App):
     def _run_worker(self, values: dict, files: list[str]):
         """Runs on a background thread. Never touch widgets directly here."""
         init_android_thread_classloader()
+
+        base_dir = storage_root(self)
+        logs_dir = base_dir / "logs"
+        log_path = logs_dir / "latest_run.log"
+        self._file_logger = RunFileLogger(log_path)
+        self.log(f"[Log saved to: {log_path}]")
+
         old_stdout, old_stderr = sys.stdout, sys.stderr
         sys.stdout = _StreamRedirector(old_stdout, self.log)
         sys.stderr = _StreamRedirector(old_stderr, self.log)
@@ -519,6 +579,7 @@ class Vocal2MidiApp(App):
                 self._set_status(tr("worker_stopped"))
         except Exception:
             tb = traceback.format_exc()
+            logger.error(f"Fatal worker exception:\n{tb}")
             self.log(tr("worker_error", tb=tb))
             self._set_status(tr("worker_error", tb="").strip())
         finally:
@@ -530,6 +591,17 @@ class Vocal2MidiApp(App):
                 except Exception:
                     pass
             sys.stdout, sys.stderr = old_stdout, old_stderr
+            # Mirror log file into output_dir
+            try:
+                out_dir = pathlib.Path(values.get("output_dir", ""))
+                if out_dir.is_dir() and log_path.is_file():
+                    import shutil
+                    shutil.copyfile(str(log_path), str(out_dir / "latest_run.log"))
+            except Exception:
+                pass
+            if getattr(self, "_file_logger", None) is not None:
+                self._file_logger.close()
+                self._file_logger = None
             self._set_running(False)
 
 

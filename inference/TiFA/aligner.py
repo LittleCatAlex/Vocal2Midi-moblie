@@ -260,7 +260,8 @@ def run_tifa_fa(
                 "waveform": waveform[None].astype(np.float32),
                 "duration": np.array([duration], dtype=np.float32),
             })
-            spectrogram, mask_t = spec_out["spectrogram"], spec_out["maskT"]
+            spectrogram = np.asarray(spec_out["spectrogram"], dtype=np.float32)
+            mask_t = np.asarray(spec_out["maskT"], dtype=bool)
             if not mask_t.any():
                 logger.warning(f"[TiFA] {stem}: no valid audio frames; chunk falls back to pitch-only")
                 continue

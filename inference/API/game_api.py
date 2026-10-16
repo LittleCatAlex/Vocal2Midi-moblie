@@ -225,6 +225,7 @@ def load_game_model(model_dir: str, device=None, use_cache: bool = True):
     try:
         model = GameOnnxModel(pathlib.Path(model_dir), requested_device=device)
     except Exception as e:
+        logger.error(f"Error loading GAME ONNX model from '{model_dir}': {e}", exc_info=True)
         raise RuntimeError(
             f"Error loading GAME ONNX model: {e}\n"
             "Please ensure the GAME ONNX model directory and its contents are correct."
